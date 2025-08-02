@@ -74,7 +74,7 @@ test_step = 10000
 # 修正が必要な部分のみ抜粋
 
 # 環境のリセット部分を修正
-while total_numsteps < config['num_steps']:
+for i_episode in itertools.count(1):
     episode_reward = 0
     episode_steps = 0
     done = False
@@ -117,6 +117,13 @@ while total_numsteps < config['num_steps']:
 
         memory.push(state, action, reward, next_state, mask)
         state = next_state
+
+    if total_numsteps > config['num_steps']:
+        break
+
+    print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {} mean log alpha {}".format(
+        i_episode, total_numsteps, episode_steps, round(episode_reward, 2), acc_log_alpha / episode_steps
+        ))
 
     # 評価部分も同様に修正
     if total_numsteps > test_step and config['eval'] == True:
