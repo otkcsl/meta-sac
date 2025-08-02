@@ -1,0 +1,161 @@
+import sys
+import yaml
+config = yaml.safe_load(open(sys.argv[1])) # custom hyperparams
+print(config)
+
+import os
+cores = str(config['cores'])
+os.environ["OMP_NUM_THREADS"] = cores # export OMP_NUM_THREADS=4
+os.environ["OPENBLAS_NUM_THREADS"] = cores # export OPENBLAS_NUM_THREADS=4 
+os.environ["MKL_NUM_THREADS"] = cores # export MKL_NUM_THREADS=6
+os.environ["VECLIB_MAXIMUM_THREADS"] = cores # export VECLIB_MAXIMUM_THREADS=4
+os.environ["NUMEXPR_NUM_THREADS"] = cores # export NUMEXPR_NUM_THREADS=6
+
+import random
+import datetime
+import gymnasium as gym
+import numpy as np
+import itertools
+import torch
+from sac import SAC
+from replay_memory import ReplayMemory
+
+env_names = {
+    "Ant-v4": 'ant',
+    "Hopper-v4": 'hopper',
+    "HalfCheetah-v4": 'halfcheetah', 
+    "Humanoid-v4": 'humanoid',
+    "Walker2d-v4": 'walker2d',
+    "Swimmer-v4": 'swimmer'
+}
+
+import time
+current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) 
+save_path = 'models/' + config['exp_id'] + '/' + current_time + '/'
+print(save_path)
+os.makedirs(save_path)
+
+
+if config['exp_id'] != 'debug':
+    dir = '../common/vanilla_SAC_log/{}/'.format(config['seed'])
+    os.makedirs(dir, exist_ok=True)
+    version = 'v5' if not config['automatic_entropy_tuning'] else 'v2'
+    log_file = dir + env_names[config['env_name']] + '_' + version + '.txt'
+    print(log_file)
+    sys.stdout = open(log_file, 'w')
+    
+print(config)
+print(os.getpid())
+
+# Environment
+env = gym.make(config['env_name'])
+torch.manual_seed(config['seed'])
+np.random.seed(config['seed'])
+random.seed(config['seed'])
+env.reset(seed=config['seed'])
+#env.seed(config['seed'])
+#env.action_space.np_random.seed(config['seed'])
+env.action_space.seed(config['seed'])
+env.observation_space.seed(config['seed'])
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
+# Agent
+agent = SAC(env.observation_space.shape[0], env.action_space, config)
+
+# Memory
+memory = ReplayMemory(config['replay_size'])
+
+# Training Loop
+total_numsteps = 0
+updates = 0
+test_step = 10000
+
+# 修正が必要な部分のみ抜粋
+
+# 環境のリセット部分を修正
+while total_numsteps < config['num_steps']:
+    episode_reward = 0
+    episode_steps = 0
+    done = False
+    
+    # 修正：reset()の返り値を適切に処理
+    reset_result = env.reset()
+    if isinstance(reset_result, tuple):
+        state, _ = reset_result  # gymnasium形式
+    else:
+        state = reset_result     # 古いgym形式（互換性のため）
+
+    acc_log_alpha = 0.
+    while not done:
+        if config['start_steps'] > total_numsteps:
+            action = env.action_space.sample()
+        else:
+            action = agent.select_action(state)
+
+        if len(memory) > config['batch_size']:
+            for i in range(config['updates_per_step']):
+                critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = agent.update_parameters(memory, config['batch_size'], updates)
+                updates += 1
+                acc_log_alpha += np.log(alpha)
+
+        # 修正：step()の返り値を適切に処理
+        step_result = env.step(action)
+        if len(step_result) == 5:  # gymnasium形式
+            next_state, reward, terminated, truncated, _ = step_result
+            done = terminated or truncated
+        else:  # 古いgym形式（互換性のため）
+            next_state, reward, done, _ = step_result
+            
+        episode_steps += 1
+        total_numsteps += 1
+        episode_reward += reward
+
+        # 修正：_max_episode_stepsの取得方法を変更
+        max_episode_steps = getattr(env, '_max_episode_steps', getattr(env.spec, 'max_episode_steps', 1000))
+        mask = 1 if episode_steps == max_episode_steps else float(not done)
+
+        memory.push(state, action, reward, next_state, mask)
+        state = next_state
+
+    # 評価部分も同様に修正
+    if total_numsteps > test_step and config['eval'] == True:
+        test_step += 10000
+        avg_reward = 0.
+        episodes = 10
+        for _ in range(episodes):
+            # 修正：評価時のreset()も修正
+            reset_result = env.reset()
+            if isinstance(reset_result, tuple):
+                state, _ = reset_result
+            else:
+                state = reset_result
+                
+            episode_reward = 0
+            done = False
+            while not done:
+                action = agent.select_action(state, eval=True)
+                
+                # 修正：評価時のstep()も修正
+                step_result = env.step(action)
+                if len(step_result) == 5:
+                    next_state, reward, terminated, truncated, _ = step_result
+                    done = terminated or truncated
+                else:
+                    next_state, reward, done, _ = step_result
+                    
+                episode_reward += reward
+                state = next_state
+            avg_reward += episode_reward
+        avg_reward /= episodes
+
+
+        print("----------------------------------------")
+        print("Total_numsteps: {}, Avg. Reward: {}".format(total_numsteps, round(avg_reward, 2)))
+        if config['automatic_entropy_tuning']:
+            print("Test Log Alpha: {}".format(agent.log_alpha.item()))
+        print("----------------------------------------")
+
+agent.save_model(save_path, config['env_name'], suffix = None)
+env.close()
+
