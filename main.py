@@ -13,7 +13,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = cores # export NUMEXPR_NUM_THREADS=6
 
 import random
 import datetime
-import gymnasium as gym
+import gym
 import numpy as np
 import itertools
 import torch
@@ -21,12 +21,12 @@ from sac import SAC
 from replay_memory import ReplayMemory
 
 env_names = {
-    "Ant-v4": 'ant',
-    "Hopper-v4": 'hopper',
-    "HalfCheetah-v4": 'halfcheetah', 
-    "Humanoid-v4": 'humanoid',
-    "Walker2d-v4": 'walker2d',
-    "Swimmer-v4": 'swimmer'
+    "Ant-v2": 'ant',
+    "Hopper-v2": 'hopper',
+    "HalfCheetah-v2": 'halfcheetah', 
+    "Humanoid-v2": 'humanoid',
+    "Walker2d-v2": 'walker2d',
+    "Swimmer-v2": 'swimmer'
 }
 
 import time
@@ -39,7 +39,7 @@ os.makedirs(save_path)
 if config['exp_id'] != 'debug':
     dir = '../common/vanilla_SAC_log/{}/'.format(config['seed'])
     os.makedirs(dir, exist_ok=True)
-    version = 'v5' if not config['automatic_entropy_tuning'] else 'v2'
+    version = 'v1' if not config['automatic_entropy_tuning'] else 'v2'
     log_file = dir + env_names[config['env_name']] + '_' + version + '.txt'
     print(log_file)
     sys.stdout = open(log_file, 'w')
@@ -52,11 +52,8 @@ env = gym.make(config['env_name'])
 torch.manual_seed(config['seed'])
 np.random.seed(config['seed'])
 random.seed(config['seed'])
-env.reset(seed=config['seed'])
-#env.seed(config['seed'])
-#env.action_space.np_random.seed(config['seed'])
-env.action_space.seed(config['seed'])
-env.observation_space.seed(config['seed'])
+env.seed(config['seed'])
+env.action_space.np_random.seed(config['seed'])
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
@@ -71,91 +68,80 @@ total_numsteps = 0
 updates = 0
 test_step = 10000
 
-# 修正が必要な部分のみ抜粋
-
-# 環境のリセット部分を修正
-while total_numsteps < config['num_steps']:
+for i_episode in itertools.count(1):
     episode_reward = 0
     episode_steps = 0
     done = False
-    
-    # 修正：reset()の返り値を適切に処理
-    reset_result = env.reset()
-    if isinstance(reset_result, tuple):
-        state, _ = reset_result  # gymnasium形式
-    else:
-        state = reset_result     # 古いgym形式（互換性のため）
+    state = env.reset()
 
     acc_log_alpha = 0.
     while not done:
         if config['start_steps'] > total_numsteps:
-            action = env.action_space.sample()
+            action = env.action_space.sample()  # Sample random action
         else:
-            action = agent.select_action(state)
+            action = agent.select_action(state)  # Sample action from policy
 
         if len(memory) > config['batch_size']:
+            # Number of updates per step in environment
             for i in range(config['updates_per_step']):
+                # Update parameters of all the networks
                 critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = agent.update_parameters(memory, config['batch_size'], updates)
+
                 updates += 1
                 acc_log_alpha += np.log(alpha)
 
-        # 修正：step()の返り値を適切に処理
-        step_result = env.step(action)
-        if len(step_result) == 5:  # gymnasium形式
-            next_state, reward, terminated, truncated, _ = step_result
-            done = terminated or truncated
-        else:  # 古いgym形式（互換性のため）
-            next_state, reward, done, _ = step_result
-            
+        next_state, reward, done, _ = env.step(action) # Step
         episode_steps += 1
         total_numsteps += 1
         episode_reward += reward
 
-        # 修正：_max_episode_stepsの取得方法を変更
-        max_episode_steps = getattr(env, '_max_episode_steps', getattr(env.spec, 'max_episode_steps', 1000))
-        mask = 1 if episode_steps == max_episode_steps else float(not done)
+        # Ignore the "done" signal if it comes from hitting the time horizon.
+        # (https://github.com/openai/spinningup/blob/master/spinup/algos/sac/sac.py)
+        mask = 1 if episode_steps == env._max_episode_steps else float(not done)
 
-        memory.push(state, action, reward, next_state, mask)
+        memory.push(state, action, reward, next_state, mask) # Append transition to memory
+
         state = next_state
 
-    # 評価部分も同様に修正
+        # if total_numsteps in save_numsteps:
+        #     if config['automatic_entropy_tuning']:
+        #         version = 'v2'
+        #     else:
+        #         version = 'v1'
+        #     agent.save_model(save_path, env_name=config['env_name'], suffix="{}{}".format(str(total_numsteps), version))
+
+    if total_numsteps > config['num_steps']:
+        break
+
+    print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {} mean log alpha {}".format(
+        i_episode, total_numsteps, episode_steps, round(episode_reward, 2), acc_log_alpha / episode_steps
+        ))
+
     if total_numsteps > test_step and config['eval'] == True:
         test_step += 10000
+
         avg_reward = 0.
         episodes = 10
-        for _ in range(episodes):
-            # 修正：評価時のreset()も修正
-            reset_result = env.reset()
-            if isinstance(reset_result, tuple):
-                state, _ = reset_result
-            else:
-                state = reset_result
-                
+        for _  in range(episodes):
+            state = env.reset()
             episode_reward = 0
             done = False
             while not done:
                 action = agent.select_action(state, eval=True)
-                
-                # 修正：評価時のstep()も修正
-                step_result = env.step(action)
-                if len(step_result) == 5:
-                    next_state, reward, terminated, truncated, _ = step_result
-                    done = terminated or truncated
-                else:
-                    next_state, reward, done, _ = step_result
-                    
+
+                next_state, reward, done, _ = env.step(action)
                 episode_reward += reward
+
+
                 state = next_state
             avg_reward += episode_reward
         avg_reward /= episodes
 
-
         print("----------------------------------------")
-        print("Total_numsteps: {}, Avg. Reward: {}".format(total_numsteps, round(avg_reward, 2)))
+        print("Test Episodes: {}, Avg. Reward: {}".format(episodes, round(avg_reward, 2)))
         if config['automatic_entropy_tuning']:
             print("Test Log Alpha: {}".format(agent.log_alpha.item()))
         print("----------------------------------------")
 
-agent.save_model(save_path, config['env_name'], suffix = None)
 env.close()
 
