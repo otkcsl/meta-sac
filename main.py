@@ -80,7 +80,7 @@ for i_episode in itertools.count(1):
     done = False
     
     # 修正：reset()の返り値を適切に処理
-    reset_result = env.reset()
+    reset_result = env.reset(seed=config['seed'])
     if isinstance(reset_result, tuple):
         state, _ = reset_result  # gymnasium形式
     else:
@@ -132,7 +132,7 @@ for i_episode in itertools.count(1):
         episodes = 10
         for _ in range(episodes):
             # 修正：評価時のreset()も修正
-            reset_result = env.reset()
+            reset_result = env.reset(seed=config['seed'])
             if isinstance(reset_result, tuple):
                 state, _ = reset_result
             else:
