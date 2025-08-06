@@ -32,7 +32,7 @@ env_names = {
 
 import time
 current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) 
-save_path = 'models/' + config['exp_id'] + '/' + current_time + '/'
+save_path = 'models/' + config['exp_id'] + '/' + config['automatic_entropy_tuning'] + '/' + config['seed'] + '/'
 print(save_path)
 os.makedirs(save_path)
 
