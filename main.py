@@ -1,5 +1,6 @@
 import sys
 import yaml
+import pandas as pd
 config = yaml.safe_load(open(sys.argv[1])) # custom hyperparams
 print(config)
 
@@ -67,6 +68,7 @@ agent = SAC(env.observation_space.shape[0], env.action_space, config)
 memory = ReplayMemory(config['replay_size'])
 
 # Training Loop
+ave_re = []
 total_numsteps = 0
 updates = 0
 test_step = 10000
@@ -155,6 +157,7 @@ for i_episode in itertools.count(1):
                 state = next_state
             avg_reward += episode_reward
         avg_reward /= episodes
+        ave_re.append(avg_reward)
 
 
         print("----------------------------------------")
@@ -163,6 +166,9 @@ for i_episode in itertools.count(1):
             print("Test Log Alpha: {}".format(agent.log_alpha.item()))
         print("----------------------------------------")
 
+df = pd.DataFrame({'average_reward': ave_re})
+file_path = os.path.join(save_path, 'average_rewards.csv')
+df.to_csv(file_path, index=False)
 agent.save_model(save_path, config['env_name'], suffix = None)
 env.close()
 
