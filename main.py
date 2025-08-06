@@ -31,19 +31,20 @@ env_names = {
 }
 
 import time
-current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) 
-save_path = 'models/' + config['exp_id'] + '/' + current_time + '/'
-print(save_path)
-os.makedirs(save_path)
 
 
 if config['exp_id'] != 'debug':
     dir = '../common/vanilla_SAC_log/{}/'.format(config['seed'])
     os.makedirs(dir, exist_ok=True)
-    version = 'v5' if not config['automatic_entropy_tuning'] else 'v2'
+    version = 'v1' if not config['automatic_entropy_tuning'] else 'v2'
     log_file = dir + env_names[config['env_name']] + '_' + version + '.txt'
     print(log_file)
     sys.stdout = open(log_file, 'w')
+
+current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) 
+save_path = 'models/' + config['exp_id'] + '/' + version + '/' + str(config['seed']) + '/'
+print(save_path)
+os.makedirs(save_path)
     
 print(config)
 print(os.getpid())
