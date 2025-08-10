@@ -72,7 +72,7 @@ memory = ReplayMemory(config['replay_size'])
 ave_re = []
 total_numsteps = 0
 updates = 0
-test_step = 10000
+test_step = 1000
 
 # 修正が必要な部分のみ抜粋
 
@@ -121,51 +121,51 @@ for i_episode in itertools.count(1):
         memory.push(state, action, reward, next_state, mask)
         state = next_state
 
+        # 評価部分も同様に修正
+        if total_numsteps > test_step and config['eval'] == True:
+            test_step += 1000
+            avg_reward = 0.
+            episodes = 10
+            for _ in range(episodes):
+                # 修正：評価時のreset()も修正
+                reset_result = env.reset(seed=config['seed'])
+                if isinstance(reset_result, tuple):
+                    state, _ = reset_result
+                else:
+                    state = reset_result
+                    
+                episode_reward = 0
+                done = False
+                while not done:
+                    action = agent.select_action(state, eval=True)
+                    
+                    # 修正：評価時のstep()も修正
+                    step_result = env.step(action)
+                    if len(step_result) == 5:
+                        next_state, reward, terminated, truncated, _ = step_result
+                        done = terminated or truncated
+                    else:
+                        next_state, reward, done, _ = step_result
+                        
+                    episode_reward += reward
+                    state = next_state
+                avg_reward += episode_reward
+            avg_reward /= episodes
+            ave_re.append(avg_reward)
+
+
+            print("----------------------------------------")
+            print("Total_numsteps: {}, Avg. Reward: {}".format(total_numsteps, round(avg_reward, 2)))
+            if config['automatic_entropy_tuning']:
+                print("Test Log Alpha: {}".format(agent.log_alpha.item()))
+            print("----------------------------------------")
+
     if total_numsteps > config['num_steps']:
         break
 
     print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {} mean log alpha {}".format(
         i_episode, total_numsteps, episode_steps, round(episode_reward, 2), acc_log_alpha / episode_steps
         ))
-
-    # 評価部分も同様に修正
-    if total_numsteps > test_step and config['eval'] == True:
-        test_step += 10000
-        avg_reward = 0.
-        episodes = 10
-        for _ in range(episodes):
-            # 修正：評価時のreset()も修正
-            reset_result = env.reset(seed=config['seed'])
-            if isinstance(reset_result, tuple):
-                state, _ = reset_result
-            else:
-                state = reset_result
-                
-            episode_reward = 0
-            done = False
-            while not done:
-                action = agent.select_action(state, eval=True)
-                
-                # 修正：評価時のstep()も修正
-                step_result = env.step(action)
-                if len(step_result) == 5:
-                    next_state, reward, terminated, truncated, _ = step_result
-                    done = terminated or truncated
-                else:
-                    next_state, reward, done, _ = step_result
-                    
-                episode_reward += reward
-                state = next_state
-            avg_reward += episode_reward
-        avg_reward /= episodes
-        ave_re.append(avg_reward)
-
-
-        print("----------------------------------------")
-        print("Total_numsteps: {}, Avg. Reward: {}".format(total_numsteps, round(avg_reward, 2)))
-        if config['automatic_entropy_tuning']:
-            print("Test Log Alpha: {}".format(agent.log_alpha.item()))
-        print("----------------------------------------")
 
 df = pd.DataFrame({'average_reward': ave_re})
 file_path = os.path.join(save_path, 'average_rewards.csv')
