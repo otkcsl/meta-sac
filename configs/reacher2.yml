@@ -9,7 +9,7 @@ exp_id: reacher
 gamma: 0.99
 hidden_size: 256
 lr: 0.0003
-num_steps: 1000000
+num_steps: 250000
 policy: Gaussian
 replay_size: 1000000
 seed: 2021
