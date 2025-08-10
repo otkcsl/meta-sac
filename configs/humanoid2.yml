@@ -3,7 +3,7 @@ automatic_entropy_tuning: true
 batch_size: 256
 cores: 2
 cuda: 0
-env_name: Humanoid-v2
+env_name: Humanoid-v4
 eval: true
 exp_id: humanoid
 gamma: 0.99
