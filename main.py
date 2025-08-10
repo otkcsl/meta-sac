@@ -36,7 +36,7 @@ import time
 if config['exp_id'] != 'debug':
     dir = '../common/vanilla_SAC_log/{}/'.format(config['seed'])
     os.makedirs(dir, exist_ok=True)
-    version = 'v1' if not config['automatic_entropy_tuning'] else 'v3'
+    version = 'v1' if not config['automatic_entropy_tuning'] else 'v2'
     log_file = dir + env_names[config['env_name']] + '_' + version + '.txt'
     print(log_file)
     sys.stdout = open(log_file, 'w')
