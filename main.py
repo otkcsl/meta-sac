@@ -28,7 +28,7 @@ env_names = {
     "Humanoid-v4": 'humanoid',
     "Walker2d-v4": 'walker2d',
     "Swimmer-v4": 'swimmer',
-    "reacher-v4": 'reacher',
+    "Reacher-v4": 'reacher',
 }
 
 import time
@@ -43,7 +43,7 @@ if config['exp_id'] != 'debug':
     sys.stdout = open(log_file, 'w')
 
 current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) 
-save_path = 'models/' + config['exp_id'] + '/' + version + '/' + str(config['seed']) + '/'
+save_path = 'models/' + config['exp_id'] + '/' + str(config['alpha']) + '/' + version + '/' + str(config['seed']) + '/'
 print(save_path)
 os.makedirs(save_path)
     
