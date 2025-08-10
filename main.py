@@ -27,7 +27,8 @@ env_names = {
     "HalfCheetah-v4": 'halfcheetah', 
     "Humanoid-v4": 'humanoid',
     "Walker2d-v4": 'walker2d',
-    "Swimmer-v4": 'swimmer'
+    "Swimmer-v4": 'swimmer',
+    "Reacher-v4": 'reacher'
 }
 
 import time
