@@ -49,7 +49,6 @@ os.makedirs(save_path)
 print(config)
 print(os.getpid())
 
-# Environment
 env = gym.make(config['env_name'])
 torch.manual_seed(config['seed'])
 np.random.seed(config['seed'])
@@ -59,35 +58,32 @@ env.reset(seed=config['seed'])
 #env.action_space.np_random.seed(config['seed'])
 env.action_space.seed(config['seed'])
 env.observation_space.seed(config['seed'])
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(config['seed'])
+    torch.cuda.manual_seed_all(config['seed'])
+
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-# Agent
 agent = SAC(env.observation_space.shape[0], env.action_space, config)
 
-# Memory
 memory = ReplayMemory(config['replay_size'])
 
-# Training Loop
 ave_re = []
 total_numsteps = 0
 updates = 0
 test_step = 1000
 
-# 修正が必要な部分のみ抜粋
-
-# 環境のリセット部分を修正
 for i_episode in itertools.count(1):
     episode_reward = 0
     episode_steps = 0
     done = False
     
-    # 修正：reset()の返り値を適切に処理
     reset_result = env.reset(seed = 42 + total_numsteps)
     if isinstance(reset_result, tuple):
-        state, _ = reset_result  # gymnasium形式
+        state, _ = reset_result  
     else:
-        state = reset_result     # 古いgym形式（互換性のため）
+        state = reset_result 
 
     acc_log_alpha = 0.
     while not done:
@@ -102,32 +98,28 @@ for i_episode in itertools.count(1):
                 updates += 1
                 acc_log_alpha += np.log(alpha)
 
-        # 修正：step()の返り値を適切に処理
         step_result = env.step(action)
-        if len(step_result) == 5:  # gymnasium形式
+        if len(step_result) == 5:  
             next_state, reward, terminated, truncated, _ = step_result
             done = terminated or truncated
-        else:  # 古いgym形式（互換性のため）
+        else: 
             next_state, reward, done, _ = step_result
             
         episode_steps += 1
         total_numsteps += 1
         episode_reward += reward
 
-        # 修正：_max_episode_stepsの取得方法を変更
         max_episode_steps = getattr(env, '_max_episode_steps', getattr(env.spec, 'max_episode_steps', 1000))
         mask = 1 if episode_steps == max_episode_steps else float(not done)
 
         memory.push(state, action, reward, next_state, mask)
         state = next_state
 
-        # 評価部分も同様に修正
         if total_numsteps > test_step and config['eval'] == True:
             test_step += 1000
             avg_reward = 0.
             episodes = 10
             for _ in range(episodes):
-                # 修正：評価時のreset()も修正
                 reset_result = env.reset(seed=config['seed'])
                 if isinstance(reset_result, tuple):
                     state, _ = reset_result
@@ -139,7 +131,6 @@ for i_episode in itertools.count(1):
                 while not done:
                     action = agent.select_action(state, eval=True)
                     
-                    # 修正：評価時のstep()も修正
                     step_result = env.step(action)
                     if len(step_result) == 5:
                         next_state, reward, terminated, truncated, _ = step_result
