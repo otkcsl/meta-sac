@@ -36,7 +36,7 @@ import time
 if config['exp_id'] != 'debug':
     dir = '../common/vanilla_SAC_log/{}/'.format(config['seed'])
     os.makedirs(dir, exist_ok=True)
-    version = 'v1' if not config['automatic_entropy_tuning'] else 'v2'
+    version = 'v1' if not config['automatic_entropy_tuning'] else 'v3'
     log_file = dir + env_names[config['env_name']] + '_' + version + '.txt'
     print(log_file)
     sys.stdout = open(log_file, 'w')
@@ -83,7 +83,7 @@ for i_episode in itertools.count(1):
     done = False
     
     # 修正：reset()の返り値を適切に処理
-    reset_result = env.reset(seed=config['seed'])
+    reset_result = env.reset(seed = 42 + total_numsteps)
     if isinstance(reset_result, tuple):
         state, _ = reset_result  # gymnasium形式
     else:
