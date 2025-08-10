@@ -5,7 +5,7 @@ cores: 2
 cuda: 0
 env_name: Reacher-v4
 eval: true
-exp_id: ant
+exp_id: reacher
 gamma: 0.99
 hidden_size: 256
 lr: 0.0003
