@@ -69,7 +69,14 @@ agent = SAC(env.observation_space.shape[0], env.action_space, config)
 
 memory = ReplayMemory(config['replay_size'])
 
+temp_step = []
 ave_re = []
+avg_rewards = []
+policy_losses = []
+critic_1_losses = []
+critic_2_losses = []
+ent_losses = []
+sum_alphas = []
 total_numsteps = 0
 updates = 0
 test_step = 1000
@@ -144,6 +151,13 @@ for i_episode in itertools.count(1):
             avg_reward /= episodes
             ave_re.append(avg_reward)
 
+            temp_step.append(total_numsteps-1)
+            avg_rewards.append(avg_reward)
+            policy_losses.append(policy_loss if 'policy_loss' in locals() else None)
+            critic_1_losses.append(critic_1_loss if 'critic_1_loss' in locals() else None)
+            critic_2_losses.append(critic_2_loss if 'critic_2_loss' in locals() else None)
+            ent_losses.append(ent_loss if 'ent_loss' in locals() else None)
+            sum_alphas.append(alpha if 'alpha' in locals() else None)
 
             print("----------------------------------------")
             print("Total_numsteps: {}, Avg. Reward: {}".format(total_numsteps, round(avg_reward, 2)))
@@ -157,6 +171,17 @@ for i_episode in itertools.count(1):
     print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {} mean log alpha {}".format(
         i_episode, total_numsteps, episode_steps, round(episode_reward, 2), acc_log_alpha / episode_steps
         ))
+
+df_eval = pd.DataFrame({
+    'step': temp_step,
+    'avg_reward': avg_rewards,
+    'policy_loss': policy_losses,
+    'critic1_loss': critic_1_losses,
+    'critic2_loss': critic_2_losses,
+    'ent_loss': ent_losses,
+    'alpha': sum_alphas
+})
+df_eval.to_csv(os.path.join(save_path, 'eval_metrics.csv'), index=False)
 
 df = pd.DataFrame({'average_reward': ave_re})
 file_path = os.path.join(save_path, 'average_rewards.csv')
