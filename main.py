@@ -71,7 +71,11 @@ agent = SAC(env.observation_space.shape[0], env.action_space, config)
 memory = ReplayMemory(config['replay_size'])
 
 temp_step = []
-ave_re = []
+seed_2021 = []
+seed_2022 = []
+seed_2023 = []
+seed_2024 = []
+seed_2025 = []
 avg_rewards = []
 policy_losses = []
 critic_1_losses = []
@@ -126,33 +130,40 @@ for i_episode in itertools.count(1):
         if total_numsteps > test_step and config['eval'] == True:
             test_step += 1000
             avg_reward = 0.
-            episodes = 10
-            for _ in range(episodes):
-                reset_result = env.reset(seed=config['seed'])
-                if isinstance(reset_result, tuple):
-                    state, _ = reset_result
+            episodes = 5
+            test_part_reward = []
+            for j in range(episodes):
+                test_reset_result = env.reset(seed=config['seed']+ j)
+                if isinstance(test_reset_result, tuple):
+                    test_state, _ = test_reset_result
                 else:
-                    state = reset_result
+                    test_state = test_reset_result
                     
-                episode_reward = 0
-                done = False
-                while not done:
-                    action = agent.select_action(state, eval=True)
+                test_episode_reward = 0
+                test_done = False
+                while not test_done:
+                    test_action = agent.select_action(test_state, eval=True)
                     
-                    step_result = env.step(action)
-                    if len(step_result) == 5:
-                        next_state, reward, terminated, truncated, _ = step_result
-                        done = terminated or truncated
+                    test_step_result = env.step(test_action)
+                    if len(test_step_result) == 5:
+                        test_next_state, test_reward, test_terminated, test_truncated, _ = test_step_result
+                        test_done = test_terminated or test_truncated
                     else:
-                        next_state, reward, done, _ = step_result
+                        test_next_state, test_reward, test_done, _ = test_step_result
                         
-                    episode_reward += reward
-                    state = next_state
-                avg_reward += episode_reward
-            avg_reward /= episodes
-            ave_re.append(avg_reward)
+                    test_episode_reward += test_reward
+                    test_state = test_next_state
+                test_part_reward.append(test_episode_reward)
+            print(test_part_reward)
+
+            avg_reward = np.mean(test_part_reward)
 
             temp_step.append(total_numsteps-1)
+            seed_2021.append(test_part_reward[0])
+            seed_2022.append(test_part_reward[1])
+            seed_2023.append(test_part_reward[2])
+            seed_2024.append(test_part_reward[3])
+            seed_2025.append(test_part_reward[4])
             avg_rewards.append(avg_reward)
             policy_losses.append(policy_loss if 'policy_loss' in locals() else None)
             critic_1_losses.append(critic_1_loss if 'critic_1_loss' in locals() else None)
@@ -175,6 +186,11 @@ for i_episode in itertools.count(1):
 
 df_eval = pd.DataFrame({
     'step': temp_step,
+    'seed_2021': seed_2021,
+    'seed_2022': seed_2022,
+    'seed_2023': seed_2023,
+    'seed_2024': seed_2024,
+    'seed_2025': seed_2025,
     'avg_reward': avg_rewards,
     'policy_loss': policy_losses,
     'critic1_loss': critic_1_losses,
@@ -184,9 +200,6 @@ df_eval = pd.DataFrame({
 })
 df_eval.to_csv(os.path.join(save_path, 'eval_metrics.csv'), index=False)
 
-df = pd.DataFrame({'average_reward': ave_re})
-file_path = os.path.join(save_path, 'average_rewards.csv')
-df.to_csv(file_path, index=False)
 agent.save_model(save_path, config['env_name'], suffix = None)
 env.close()
 
