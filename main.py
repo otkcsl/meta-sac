@@ -128,27 +128,27 @@ for i_episode in itertools.count(1):
             avg_reward = 0.
             episodes = 10
             for _ in range(episodes):
-                reset_result = env.reset(seed=config['seed'])
-                if isinstance(reset_result, tuple):
-                    state, _ = reset_result
+                test_reset_result = env.reset(seed=config['seed'])
+                if isinstance(test_reset_result, tuple):
+                    test_state, _ = test_reset_result
                 else:
-                    state = reset_result
+                    test_state = test_reset_result
                     
-                episode_reward = 0
-                done = False
-                while not done:
-                    action = agent.select_action(state, eval=True)
+                test_episode_reward = 0
+                test_done = False
+                while not test_done:
+                    test_action = agent.select_action(test_state, eval=True)
                     
-                    step_result = env.step(action)
-                    if len(step_result) == 5:
-                        next_state, reward, terminated, truncated, _ = step_result
-                        done = terminated or truncated
+                    test_step_result = env.step(test_action)
+                    if len(test_step_result) == 5:
+                        test_next_state, test_reward, test_terminated, test_truncated, _ = test_step_result
+                        test_done = test_terminated or test_truncated
                     else:
-                        next_state, reward, done, _ = step_result
+                        test_next_state, test_reward, test_done, _ = test_step_result
                         
-                    episode_reward += reward
-                    state = next_state
-                avg_reward += episode_reward
+                    test_episode_reward += test_reward
+                    test_state = test_next_state
+                avg_reward += test_episode_reward
             avg_reward /= episodes
             ave_re.append(avg_reward)
 
