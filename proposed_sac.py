@@ -11,7 +11,7 @@ class SAC(object):
 
         self.gamma = config['gamma']
         self.tau = config['tau']
-        self.alpha = config['alpha']
+        self.alpha = config['alpha'][0]
 
         self.policy_type = config['policy']
         self.target_update_interval = config['target_update_interval']
