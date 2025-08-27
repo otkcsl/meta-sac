@@ -18,7 +18,7 @@ import gymnasium as gym
 import numpy as np
 import itertools
 import torch
-from sac import SAC
+from proposed_sac import SAC
 from replay_memory import ReplayMemory
 
 env_names = {
