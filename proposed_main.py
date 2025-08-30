@@ -18,6 +18,7 @@ import gymnasium as gym
 import numpy as np
 import itertools
 import torch
+import torch.nn as nn
 from proposed_sac import SAC
 from replay_memory import ReplayMemory
 
@@ -45,20 +46,120 @@ if config['exp_id'] != 'debug':
 current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) 
 save_path = 'models/' + config['exp_id'] + '/' + str(config['alpha']) + '/' + version + '/' + str(config['seed']) + '/'
 print(save_path)
-os.makedirs(save_path)
+os.makedirs(save_path, exist_ok=True)
     
 print(config)
 print(os.getpid())
 
-env = gym.make(config['env_name'])
+def sync_gtoq_params(target, source):
+    with torch.no_grad():
+        for target_param, param in zip(target.parameters(), source.parameters()):
+            target_param.copy_(param)
+
+def sync_qtog_params(target, source):
+    with torch.no_grad():
+        for target_param, param in zip(target.parameters(), source.parameters()):
+            target_param.copy_(config['tau_g'] * param + (1 - config['tau_g']) * target_param)
+
+def run(agent, memory, env, config, total_step, state, done, episode_reward, test, test_rewards, critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha, updates, agent_acc_log_alpha, glo, index):
+    if config['teian'] == True:
+        if (total_step + 1) % config['qtog'] == 0:
+            sync_qtog_params(glo.critic, agent.critic)
+            sync_qtog_params(glo.critic_target, agent.critic_target)
+            sync_qtog_params(glo.policy, agent.policy)
+
+        if (total_step + 1) % config['gtoq'] == 0:
+            sync_gtoq_params(agent.critic, glo.critic)
+            sync_gtoq_params(agent.critic_target, glo.critic_target)
+            sync_gtoq_params(agent.policy, glo.policy)
+
+    if len(memory) > config['batch_size']:
+        for _ in range(config['updates_per_step']):
+            critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = agent.update_parameters(memory, config['batch_size'], updates)
+            updates += 1
+            agent_acc_log_alpha += np.log(alpha)
+
+    if config['start_steps'] > total_step:
+        action = env.action_space.sample()
+    else:
+        action = agent.select_action(state)
+    
+    step_result = env.step(action)
+    if len(step_result) == 5:  
+        next_state, reward, terminated, truncated, _ = step_result
+        done = terminated or truncated
+    else: 
+        next_state, reward, done, _ = step_result
+        
+    total_step += 1
+    episode_reward += reward
+
+    max_episode_steps = getattr(env, '_max_episode_steps', getattr(env.spec, 'max_episode_steps', 1000))
+    mask = 1 if total_step == max_episode_steps else float(not done)
+
+    memory.push(state, action, reward, next_state, mask)
+    state = next_state
+
+    if total_step % config['test_step'] == 0 and config['eval'] == True:
+        avg_reward = 0.
+        episodes = 5
+        test_part_reward = []
+        for j in range(episodes):
+            test_reset_result = env.reset(seed=config['seed']+ j)
+            if isinstance(test_reset_result, tuple):
+                test_state, _ = test_reset_result
+            else:
+                test_state = test_reset_result
+                
+            test_episode_reward = 0
+            test_done = False
+            while not test_done:
+                test_action = agent.select_action(test_state, eval=True)
+                
+                test_step_result = env.step(test_action)
+                if len(test_step_result) == 5:
+                    test_next_state, test_reward, test_terminated, test_truncated, _ = test_step_result
+                    test_done = test_terminated or test_truncated
+                else:
+                    test_next_state, test_reward, test_done, _ = test_step_result
+                    
+                test_episode_reward += test_reward
+                test_state = test_next_state
+            test_part_reward.append(test_episode_reward)
+        print(test_part_reward)
+
+        avg_reward = np.mean(test_part_reward)
+
+        temp_step[index].append(total_step)
+        seed_2021[index].append(test_part_reward[0])
+        seed_2022[index].append(test_part_reward[1])
+        seed_2023[index].append(test_part_reward[2])
+        seed_2024[index].append(test_part_reward[3])
+        seed_2025[index].append(test_part_reward[4])
+        avg_rewards[index].append(avg_reward)
+        policy_losses[index].append(policy_loss if 'policy_loss' in locals() else None)
+        critic_1_losses[index].append(critic_1_loss if 'critic_1_loss' in locals() else None)
+        critic_2_losses[index].append(critic_2_loss if 'critic_2_loss' in locals() else None)
+        ent_losses[index].append(ent_loss if 'ent_loss' in locals() else None)
+        sum_alphas[index].append(alpha if 'alpha' in locals() else None)
+
+        print("----------------------------------------")
+        print("Total_step: {}, Avg. Reward: {}".format(total_step, round(avg_reward, 2)))
+        if config['automatic_entropy_tuning']:
+            print("Test Log Alpha: {}".format(agent.log_alpha.item()))
+        print("----------------------------------------")
+    return total_step, state, done, episode_reward, updates, agent_acc_log_alpha, alpha
+
+envs = {}
+for i in range(len(config['alpha'])):
+    envs[i] = gym.make(config['env_name'])
+    envs[i].reset(seed=config['seed'])
+    envs[i].action_space.seed(config['seed'])
+    envs[i].observation_space.seed(config['seed'])
+
 torch.manual_seed(config['seed'])
 np.random.seed(config['seed'])
 random.seed(config['seed'])
-env.reset(seed=config['seed'])
-#env.seed(config['seed'])
-#env.action_space.np_random.seed(config['seed'])
-env.action_space.seed(config['seed'])
-env.observation_space.seed(config['seed'])
 if torch.cuda.is_available():
     torch.cuda.manual_seed(config['seed'])
     torch.cuda.manual_seed_all(config['seed'])
@@ -66,140 +167,113 @@ if torch.cuda.is_available():
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-agent = SAC(env.observation_space.shape[0], env.action_space, config)
+globals = {
+    f'global': SAC(envs[0].observation_space.shape[0], envs[0].action_space, config, config['alpha'][0])
+}
+agents = {
+    f'agent{i}': SAC(envs[i].observation_space.shape[0], envs[i].action_space, config, config['alpha'][i])
+    for i in range(len(config['alpha']))
+}
+memories = {
+    f'memory{i}': ReplayMemory(config['replay_size'])
+    for i in range(len(config['alpha']))
+}
 
-memory = ReplayMemory(config['replay_size'])
+if config['teian'] == True:
+    for i in range(len(agents)):
+        print(f'sync agent{i} parameters')
+        sync_gtoq_params(agents[f'agent{i}'].critic, globals['global'].critic)
+        sync_gtoq_params(agents[f'agent{i}'].critic_target, globals['global'].critic_target)
+        sync_gtoq_params(agents[f'agent{i}'].policy, globals['global'].policy)
 
-temp_step = []
-seed_2021 = []
-seed_2022 = []
-seed_2023 = []
-seed_2024 = []
-seed_2025 = []
-avg_rewards = []
-policy_losses = []
-critic_1_losses = []
-critic_2_losses = []
-ent_losses = []
-sum_alphas = []
-total_numsteps = 0
-updates = 0
-test_step = 1000
+temp_step = [[] for _ in range(len(agents))]
+seed_2021 = [[] for _ in range(len(agents))]
+seed_2022 = [[] for _ in range(len(agents))]
+seed_2023 = [[] for _ in range(len(agents))]
+seed_2024 = [[] for _ in range(len(agents))]
+seed_2025 = [[] for _ in range(len(agents))]
+avg_rewards = [[] for _ in range(len(agents))]
+policy_losses = [[] for _ in range(len(agents))]
+critic_1_losses = [[] for _ in range(len(agents))]
+critic_2_losses = [[] for _ in range(len(agents))]
+ent_losses = [[] for _ in range(len(agents))]
+sum_alphas = [[] for _ in range(len(agents))]
 
-for i_episode in itertools.count(1):
-    episode_reward = 0
-    episode_steps = 0
-    done = False
-    
-    reset_result = env.reset(seed = 42 + total_numsteps)
-    if isinstance(reset_result, tuple):
-        state, _ = reset_result  
-    else:
-        state = reset_result 
+agent_states = {}
+agent_dones = {}
+agent_episode_reward = {}
+agent_episode_steps = {}
+agent_acc_log_alpha = {}
+policy_loss = {}
+critic_1_loss = {}
+critic_2_loss = {}
+ent_loss = {}
+alpha = {}
+updates = {}
 
-    acc_log_alpha = 0.
-    while not done:
-        if config['start_steps'] > total_numsteps:
-            action = env.action_space.sample()
-        else:
-            action = agent.select_action(state)
+total_steps = {i: 0 for i in range(len(agents))}
+test_rewards = {i: [] for i in range(len(agents))}
+test = {i: [] for i in range(len(agents))}
 
-        if len(memory) > config['batch_size']:
-            for i in range(config['updates_per_step']):
-                critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = agent.update_parameters(memory, config['batch_size'], updates)
-                updates += 1
-                acc_log_alpha += np.log(alpha)
+for i in range(len(agents)):
+    agent_states[i], _ = envs[i].reset(seed = 42 + total_steps[i])
+    agent_dones[i] = False
+    agent_episode_reward[i] = 0
+    agent_episode_steps[i] = 0
+    agent_acc_log_alpha[i] = 0.
+    updates[i] = 0
+    critic_1_loss[i] = 0
+    critic_2_loss[i] = 0
+    policy_loss[i] = 0
+    ent_loss[i] = 0
+    alpha[i] = 0
 
-        step_result = env.step(action)
-        if len(step_result) == 5:  
-            next_state, reward, terminated, truncated, _ = step_result
-            done = terminated or truncated
-        else: 
-            next_state, reward, done, _ = step_result
-            
-        episode_steps += 1
-        total_numsteps += 1
-        episode_reward += reward
+while not all(total_steps[i] >= config['num_steps'] for i in range(len(agents))):
+    for i in range(len(agents)):
+        if total_steps[i] >= config['num_steps']:
+            continue
 
-        max_episode_steps = getattr(env, '_max_episode_steps', getattr(env.spec, 'max_episode_steps', 1000))
-        mask = 1 if episode_steps == max_episode_steps else float(not done)
+        if agent_dones[i]:
+            agent_states[i], _ = envs[i].reset(seed=42 + total_steps[i])
+            agent_dones[i] = False
+            agent_episode_reward[i] = 0
+        total_steps[i], agent_states[i], agent_dones[i], agent_episode_reward[i] , updates[i], agent_acc_log_alpha[i], alpha[i]= \
+            run(agents[f"agent{i}"], memories[f"memory{i}"], envs[i], config, total_steps[i], agent_states[i], \
+                agent_dones[i], agent_episode_reward[i], test[i], test_rewards[i], \
+                critic_1_loss[i], critic_2_loss[i], policy_loss[i], ent_loss[i], alpha[i], updates[i], agent_acc_log_alpha[i], globals['global'], i)
 
-        memory.push(state, action, reward, next_state, mask)
-        state = next_state
+for i in range(len(agents)):
+    df_eval = pd.DataFrame({
+        'step': temp_step[i],
+        'seed_2021': seed_2021[i],
+        'seed_2022': seed_2022[i],
+        'seed_2023': seed_2023[i],
+        'seed_2024': seed_2024[i],
+        'seed_2025': seed_2025[i],
+        'avg_reward': avg_rewards[i],
+        'policy_loss': policy_losses[i],
+        'critic1_loss': critic_1_losses[i],
+        'critic2_loss': critic_2_losses[i],
+        'ent_loss': ent_losses[i],
+        'alpha': sum_alphas[i]
+    })
+    df_eval.to_csv(os.path.join(save_path, f'eval_metrics{i}.csv'), index=False)
 
-        if total_numsteps > test_step and config['eval'] == True:
-            test_step += 1000
-            avg_reward = 0.
-            episodes = 5
-            test_part_reward = []
-            for j in range(episodes):
-                test_reset_result = env.reset(seed=config['seed']+ j)
-                if isinstance(test_reset_result, tuple):
-                    test_state, _ = test_reset_result
-                else:
-                    test_state = test_reset_result
-                    
-                test_episode_reward = 0
-                test_done = False
-                while not test_done:
-                    test_action = agent.select_action(test_state, eval=True)
-                    
-                    test_step_result = env.step(test_action)
-                    if len(test_step_result) == 5:
-                        test_next_state, test_reward, test_terminated, test_truncated, _ = test_step_result
-                        test_done = test_terminated or test_truncated
-                    else:
-                        test_next_state, test_reward, test_done, _ = test_step_result
-                        
-                    test_episode_reward += test_reward
-                    test_state = test_next_state
-                test_part_reward.append(test_episode_reward)
-            print(test_part_reward)
+for i in range(len(agents)):
+    envs[i].close()
 
-            avg_reward = np.mean(test_part_reward)
 
-            temp_step.append(total_numsteps-1)
-            seed_2021.append(test_part_reward[0])
-            seed_2022.append(test_part_reward[1])
-            seed_2023.append(test_part_reward[2])
-            seed_2024.append(test_part_reward[3])
-            seed_2025.append(test_part_reward[4])
-            avg_rewards.append(avg_reward)
-            policy_losses.append(policy_loss if 'policy_loss' in locals() else None)
-            critic_1_losses.append(critic_1_loss if 'critic_1_loss' in locals() else None)
-            critic_2_losses.append(critic_2_loss if 'critic_2_loss' in locals() else None)
-            ent_losses.append(ent_loss if 'ent_loss' in locals() else None)
-            sum_alphas.append(alpha if 'alpha' in locals() else None)
+# env.seed(config['seed'])
+# env.action_space.np_random.seed(config['seed'])
 
-            print("----------------------------------------")
-            print("Total_numsteps: {}, Avg. Reward: {}".format(total_numsteps, round(avg_reward, 2)))
-            if config['automatic_entropy_tuning']:
-                print("Test Log Alpha: {}".format(agent.log_alpha.item()))
-            print("----------------------------------------")
+# l_params_before = [p.clone().cpu() for p in target.parameters()]
+# g_params_before = [p.clone().cpu() for p in source.parameters()]
+# l_params_after = [p.clone().cpu() for p in target.parameters()]
+# g_params_after = [p.clone().cpu() for p in source.parameters()]
 
-    if total_numsteps > config['num_steps']:
-        break
-
-    print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {} mean log alpha {}".format(
-        i_episode, total_numsteps, episode_steps, round(episode_reward, 2), acc_log_alpha / episode_steps
-        ))
-
-df_eval = pd.DataFrame({
-    'step': temp_step,
-    'seed_2021': seed_2021,
-    'seed_2022': seed_2022,
-    'seed_2023': seed_2023,
-    'seed_2024': seed_2024,
-    'seed_2025': seed_2025,
-    'avg_reward': avg_rewards,
-    'policy_loss': policy_losses,
-    'critic1_loss': critic_1_losses,
-    'critic2_loss': critic_2_losses,
-    'ent_loss': ent_losses,
-    'alpha': sum_alphas
-})
-df_eval.to_csv(os.path.join(save_path, 'eval_metrics.csv'), index=False)
-
-agent.save_model(save_path, config['env_name'], suffix = None)
-env.close()
-
+# for idx, (before, after) in enumerate(zip(g_params_before, g_params_after)):
+#     diff = (after - before).abs().sum().item()
+#     print(f"GlobalAgent param {idx}: diff = {diff:.6f}")
+# for idx, (before, after) in enumerate(zip(l_params_before, l_params_after)):
+#     diff = (after - before).abs().sum().item()
+#     print(f"LocalAgent param {idx}: diff = {diff:.6f}")

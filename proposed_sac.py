@@ -7,11 +7,11 @@ from model import GaussianPolicy, QNetwork
 
 
 class SAC(object):
-    def __init__(self, num_inputs, action_space, config):
+    def __init__(self, num_inputs, action_space, config, alpha):
 
         self.gamma = config['gamma']
         self.tau = config['tau']
-        self.alpha = config['alpha'][0]
+        self.alpha = alpha
 
         self.policy_type = config['policy']
         self.target_update_interval = config['target_update_interval']
