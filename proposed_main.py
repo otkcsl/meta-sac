@@ -1,6 +1,8 @@
 import sys
 import yaml
+import time
 import pandas as pd
+import json
 config = yaml.safe_load(open(sys.argv[1])) # custom hyperparams
 print(config)
 
@@ -43,7 +45,7 @@ if config['exp_id'] != 'debug':
     print(log_file)
     sys.stdout = open(log_file, 'w')
 
-current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) 
+current_time = time.time()
 save_path = 'models/' + config['exp_id'] + '/' + str(config['alpha']) + '/' + version + '/' + str(config['seed']) + '/'
 print(save_path)
 os.makedirs(save_path, exist_ok=True)
@@ -281,6 +283,17 @@ for i in range(len(agents)):
         'alpha': sum_alphas[i]
     })
     df_eval.to_csv(os.path.join(save_path, f'eval_metrics{i}.csv'), index=False)
+
+end_time = time.time()
+experiment_summary = {
+    'time' : end_time-current_time,
+    'config_contents': config
+}
+
+summary_path = os.path.join(save_path, 'experiment_summary.json')
+with open(summary_path, 'w') as f:
+    json.dump(experiment_summary, f, indent=2)
+print(f"Experiment summary saved to: {summary_path}")
 
 for i in range(len(agents)):
     envs[i].close()
