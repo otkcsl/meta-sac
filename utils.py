@@ -153,10 +153,13 @@ def log_metrics(i, step, agent, global_agent, memories, save_path):
     # 1) パラメータ差分（policy と critic の L2 と cosine）
     l2_p, cos_p = param_l2_cosine(agent.policy, global_agent.policy)
     l2_c, cos_c = param_l2_cosine(agent.critic, global_agent.critic)
+    l2_t, cos_t = param_l2_cosine(agent.critic_target, global_agent.critic_target)
     entry['agent_policy_l2'] = l2_p
     entry['agent_policy_cos'] = cos_p
     entry['agent_critic_l2'] = l2_c
     entry['agent_critic_cos'] = cos_c
+    entry['agent_critic_target_l2'] = l2_t
+    entry['agent_critic_target_cos'] = cos_t
 
     # # 2) Qの不一致（軽め：固定states 256）
     # # choose a memory that is not empty
@@ -192,10 +195,13 @@ def log_sum_metrics(step, agent_0, agent_1, memories, save_path):
     entry = {'step': step}
     l2_p, cos_p = param_l2_cosine(agent_0.policy, agent_1.policy)
     l2_c, cos_c = param_l2_cosine(agent_0.critic, agent_1.critic)
+    l2_t, cos_t = param_l2_cosine(agent_0.critic_target, agent_1.critic_target)
     entry['agent_policy_l2'] = l2_p
     entry['agent_policy_cos'] = cos_p
     entry['agent_critic_l2'] = l2_c
     entry['agent_critic_cos'] = cos_c
+    entry['agent_critic_target_l2'] = l2_t
+    entry['agent_critic_target_cos'] = cos_t
     
     metrics_fp = os.path.join(save_path, f'metrics_sum.jsonl')
     with open(metrics_fp, 'a') as f:
