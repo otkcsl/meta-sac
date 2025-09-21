@@ -1,6 +1,8 @@
 import sys
 import yaml
+import time
 import pandas as pd
+import json
 config = yaml.safe_load(open(sys.argv[1])) # custom hyperparams
 print(config)
 
@@ -36,14 +38,14 @@ import time
 
 
 if config['exp_id'] != 'debug':
-    dir = '../common/vanilla_SAC_log/{}/'.format(config['seed'])
-    os.makedirs(dir, exist_ok=True)
+    log_dir = '../common/vanilla_SAC_log/{}/'.format(config['seed'])
+    os.makedirs(log_dir, exist_ok=True)
     version = 'v1' if not config['automatic_entropy_tuning'] else 'v2'
-    log_file = dir + env_names[config['env_name']] + '_' + version + '.txt'
+    log_file = log_dir + env_names[config['env_name']] + '_' + version + '.txt'
     print(log_file)
     sys.stdout = open(log_file, 'w')
 
-current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) 
+current_time = time.time()
 save_path = 'models/' + config['exp_id'] + '/' + str(config['alpha']) + '/' + version + '/' + str(config['seed']) + '/'
 print(save_path)
 os.makedirs(save_path, exist_ok=True)
@@ -53,35 +55,35 @@ print(os.getpid())
 
 def sync_gtoq_params(target, source):
     with torch.no_grad():
-        l_params_before = [p.clone().cpu() for p in target.parameters()]
-        g_params_before = [p.clone().cpu() for p in source.parameters()]
+        # l_params_before = [p.clone().cpu() for p in target.parameters()]
+        # g_params_before = [p.clone().cpu() for p in source.parameters()]
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.copy_(param)
-        l_params_after = [p.clone().cpu() for p in target.parameters()]
-        g_params_after = [p.clone().cpu() for p in source.parameters()]
+        # l_params_after = [p.clone().cpu() for p in target.parameters()]
+        # g_params_after = [p.clone().cpu() for p in source.parameters()]
 
-        for idx, (before, after) in enumerate(zip(g_params_before, g_params_after)):
-            diff = (after - before).abs().sum().item()
-            print(f"gtoq_GlobalAgent param {idx}: diff = {diff:.6f}")
-        for idx, (before, after) in enumerate(zip(l_params_before, l_params_after)):
-            diff = (after - before).abs().sum().item()
-            print(f"gtoq_LocalAgent param {idx}: diff = {diff:.6f}")
+        # for idx, (before, after) in enumerate(zip(g_params_before, g_params_after)):
+        #     diff = (after - before).abs().sum().item()
+        #     print(f"gtoq GlobalAgent param {idx}: diff = {diff:.6f}")
+        # for idx, (before, after) in enumerate(zip(l_params_before, l_params_after)):
+        #     diff = (after - before).abs().sum().item()
+        #     print(f"gtoq LocalAgent param {idx}: diff = {diff:.6f}")
 
 def sync_qtog_params(target, source):
     with torch.no_grad():
-        l_params_before = [p.clone().cpu() for p in target.parameters()]
-        g_params_before = [p.clone().cpu() for p in source.parameters()]
+        # l_params_before = [p.clone().cpu() for p in target.parameters()]
+        # g_params_before = [p.clone().cpu() for p in source.parameters()]
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.copy_(config['tau_g'] * param + (1 - config['tau_g']) * target_param)
-        l_params_after = [p.clone().cpu() for p in target.parameters()]
-        g_params_after = [p.clone().cpu() for p in source.parameters()]
+        # l_params_after = [p.clone().cpu() for p in target.parameters()]
+        # g_params_after = [p.clone().cpu() for p in source.parameters()]
 
-        for idx, (before, after) in enumerate(zip(g_params_before, g_params_after)):
-            diff = (after - before).abs().sum().item()
-            print(f"qtog_LocalAgent param {idx}: diff = {diff:.6f}")
-        for idx, (before, after) in enumerate(zip(l_params_before, l_params_after)):
-            diff = (after - before).abs().sum().item()
-            print(f"qtog_GlobalAgent param {idx}: diff = {diff:.6f}")
+        # for idx, (before, after) in enumerate(zip(g_params_before, g_params_after)):
+        #     diff = (after - before).abs().sum().item()
+        #     print(f"qtog LocalAgent param {idx}: diff = {diff:.6f}")
+        # for idx, (before, after) in enumerate(zip(l_params_before, l_params_after)):
+        #     diff = (after - before).abs().sum().item()
+        #     print(f"qtog GlobalAgent param {idx}: diff = {diff:.6f}")
 
 def run(agent, memory, env, config, total_step, state, done, episode_reward, test, test_rewards, critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha, updates, agent_acc_log_alpha, glo, index):
     if config['teian'] == True:
@@ -175,7 +177,7 @@ def run(agent, memory, env, config, total_step, state, done, episode_reward, tes
 envs = {}
 for i in range(len(config['alpha'])):
     envs[i] = gym.make(config['env_name'])
-    envs[i].reset(seed=config['seed'])
+    # envs[i].reset(seed=config['seed'])
     envs[i].action_space.seed(config['seed'])
     envs[i].observation_space.seed(config['seed'])
 
@@ -189,7 +191,7 @@ if torch.cuda.is_available():
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-globals = {
+global_agent = {
     f'global': SAC(envs[0].observation_space.shape[0], envs[0].action_space, config, config['alpha'][0])
 }
 agents = {
@@ -204,9 +206,9 @@ memories = {
 if config['teian'] == True:
     for i in range(len(agents)):
         print(f'sync agent{i} parameters')
-        sync_gtoq_params(agents[f'agent{i}'].critic, globals['global'].critic)
-        sync_gtoq_params(agents[f'agent{i}'].critic_target, globals['global'].critic_target)
-        sync_gtoq_params(agents[f'agent{i}'].policy, globals['global'].policy)
+        sync_gtoq_params(agents[f'agent{i}'].critic, global_agent['global'].critic)
+        sync_gtoq_params(agents[f'agent{i}'].critic_target, global_agent['global'].critic_target)
+        sync_gtoq_params(agents[f'agent{i}'].policy, global_agent['global'].policy)
 
 temp_step = [[] for _ in range(len(agents))]
 seed_2021 = [[] for _ in range(len(agents))]
@@ -250,8 +252,9 @@ for i in range(len(agents)):
     ent_loss[i] = 0
     alpha[i] = 0
 
-while not all(total_steps[i] >= config['num_steps'] for i in range(len(agents))):
+while not all(total_steps[j] >= config['num_steps'] for j in range(len(agents))):
     for i in range(len(agents)):
+        print(f"agent{i}: total_steps {total_steps[i]}")
         if total_steps[i] >= config['num_steps']:
             continue
 
@@ -262,7 +265,7 @@ while not all(total_steps[i] >= config['num_steps'] for i in range(len(agents)))
         total_steps[i], agent_states[i], agent_dones[i], agent_episode_reward[i] , updates[i], agent_acc_log_alpha[i], alpha[i]= \
             run(agents[f"agent{i}"], memories[f"memory{i}"], envs[i], config, total_steps[i], agent_states[i], \
                 agent_dones[i], agent_episode_reward[i], test[i], test_rewards[i], \
-                critic_1_loss[i], critic_2_loss[i], policy_loss[i], ent_loss[i], alpha[i], updates[i], agent_acc_log_alpha[i], globals['global'], i)
+                critic_1_loss[i], critic_2_loss[i], policy_loss[i], ent_loss[i], alpha[i], updates[i], agent_acc_log_alpha[i], global_agent['global'], i)
 
 for i in range(len(agents)):
     df_eval = pd.DataFrame({
@@ -280,6 +283,17 @@ for i in range(len(agents)):
         'alpha': sum_alphas[i]
     })
     df_eval.to_csv(os.path.join(save_path, f'eval_metrics{i}.csv'), index=False)
+
+end_time = time.time()
+experiment_summary = {
+    'time' : end_time-current_time,
+    'config_contents': config
+}
+
+summary_path = os.path.join(save_path, 'experiment_summary.json')
+with open(summary_path, 'w') as f:
+    json.dump(experiment_summary, f, indent=2)
+print(f"Experiment summary saved to: {summary_path}")
 
 for i in range(len(agents)):
     envs[i].close()
