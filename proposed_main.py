@@ -23,6 +23,8 @@ import torch
 import torch.nn as nn
 from proposed_sac import SAC
 from replay_memory import ReplayMemory
+from utils import log_metrics
+from utils import log_sum_metrics
 
 env_names = {
     "Ant-v4": 'ant',
@@ -85,17 +87,21 @@ def sync_qtog_params(target, source):
         #     diff = (after - before).abs().sum().item()
         #     print(f"qtog GlobalAgent param {idx}: diff = {diff:.6f}")
 
-def run(agent, memory, env, config, total_step, state, done, episode_reward, test, test_rewards, critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha, updates, agent_acc_log_alpha, glo, index):
+def run(i, agent, memory, env, config, total_step, state, done, episode_reward, test, test_rewards, critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha, updates, agent_acc_log_alpha, glo, index):
     if config['teian'] == True:
         if (total_step + 1) % config['qtog'] == 0:
             sync_qtog_params(glo.critic, agent.critic)
             sync_qtog_params(glo.critic_target, agent.critic_target)
             sync_qtog_params(glo.policy, agent.policy)
+            log_metrics(i, total_step+1, agent, glo, memory, save_path)
+            print(f"qtog_agent{i}: total_steps {total_step + 1}")
 
         if (total_step + 1) % config['gtoq'] == 0:
             sync_gtoq_params(agent.critic, glo.critic)
             sync_gtoq_params(agent.critic_target, glo.critic_target)
             sync_gtoq_params(agent.policy, glo.policy)
+            #log_metrics(i, total_step+1, agent, glo, memory, save_path)
+            print(f"gtoq_agent{i}: total_steps {total_step + 1}")
 
     if len(memory) > config['batch_size']:
         for _ in range(config['updates_per_step']):
@@ -254,7 +260,7 @@ for i in range(len(agents)):
 
 while not all(total_steps[j] >= config['num_steps'] for j in range(len(agents))):
     for i in range(len(agents)):
-        print(f"agent{i}: total_steps {total_steps[i]}")
+        # print(f"agent{i}: total_steps {total_steps[i]}")
         if total_steps[i] >= config['num_steps']:
             continue
 
@@ -263,9 +269,13 @@ while not all(total_steps[j] >= config['num_steps'] for j in range(len(agents)))
             agent_dones[i] = False
             agent_episode_reward[i] = 0
         total_steps[i], agent_states[i], agent_dones[i], agent_episode_reward[i] , updates[i], agent_acc_log_alpha[i], alpha[i]= \
-            run(agents[f"agent{i}"], memories[f"memory{i}"], envs[i], config, total_steps[i], agent_states[i], \
+            run(i, agents[f"agent{i}"], memories[f"memory{i}"], envs[i], config, total_steps[i], agent_states[i], \
                 agent_dones[i], agent_episode_reward[i], test[i], test_rewards[i], \
                 critic_1_loss[i], critic_2_loss[i], policy_loss[i], ent_loss[i], alpha[i], updates[i], agent_acc_log_alpha[i], global_agent['global'], i)
+        
+        if (total_steps[0] % 500 == 0) and (total_steps[1] % 500 == 0):
+            log_sum_metrics(total_steps[0], agents[f"agent{0}"], agents[f"agent{1}"], memories, save_path)
+            print(f"sum_agent{i}: total_steps {total_steps[0]}")
 
 for i in range(len(agents)):
     df_eval = pd.DataFrame({
