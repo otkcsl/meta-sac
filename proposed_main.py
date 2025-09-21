@@ -53,13 +53,35 @@ print(os.getpid())
 
 def sync_gtoq_params(target, source):
     with torch.no_grad():
+        l_params_before = [p.clone().cpu() for p in target.parameters()]
+        g_params_before = [p.clone().cpu() for p in source.parameters()]
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.copy_(param)
+        l_params_after = [p.clone().cpu() for p in target.parameters()]
+        g_params_after = [p.clone().cpu() for p in source.parameters()]
+
+        for idx, (before, after) in enumerate(zip(g_params_before, g_params_after)):
+            diff = (after - before).abs().sum().item()
+            print(f"gtoq_GlobalAgent param {idx}: diff = {diff:.6f}")
+        for idx, (before, after) in enumerate(zip(l_params_before, l_params_after)):
+            diff = (after - before).abs().sum().item()
+            print(f"gtoq_LocalAgent param {idx}: diff = {diff:.6f}")
 
 def sync_qtog_params(target, source):
     with torch.no_grad():
+        l_params_before = [p.clone().cpu() for p in target.parameters()]
+        g_params_before = [p.clone().cpu() for p in source.parameters()]
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.copy_(config['tau_g'] * param + (1 - config['tau_g']) * target_param)
+        l_params_after = [p.clone().cpu() for p in target.parameters()]
+        g_params_after = [p.clone().cpu() for p in source.parameters()]
+
+        for idx, (before, after) in enumerate(zip(g_params_before, g_params_after)):
+            diff = (after - before).abs().sum().item()
+            print(f"qtog_LocalAgent param {idx}: diff = {diff:.6f}")
+        for idx, (before, after) in enumerate(zip(l_params_before, l_params_after)):
+            diff = (after - before).abs().sum().item()
+            print(f"qtog_GlobalAgent param {idx}: diff = {diff:.6f}")
 
 def run(agent, memory, env, config, total_step, state, done, episode_reward, test, test_rewards, critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha, updates, agent_acc_log_alpha, glo, index):
     if config['teian'] == True:
