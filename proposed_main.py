@@ -274,7 +274,7 @@ while not all(total_steps[j] >= config['num_steps'] for j in range(len(agents)))
                 agent_dones[i], agent_episode_reward[i], test[i], test_rewards[i], \
                 critic_1_loss[i], critic_2_loss[i], policy_loss[i], ent_loss[i], alpha[i], updates[i], agent_acc_log_alpha[i], global_agent['global'], i)
         
-        if (total_steps[0] % 500 == 0) and (total_steps[1] % 500 == 0):
+        if (total_steps[0] % 100 == 0) and (total_steps[1] % 100 == 0):
             log_sum_metrics(total_steps[0], agents[f"agent{0}"], agents[f"agent{1}"], memories, save_path)
             print(f"sum_agent{i}: total_steps {total_steps[0]}")
 
