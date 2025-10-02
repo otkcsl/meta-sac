@@ -93,15 +93,16 @@ def run(i, agent, memory, env, config, total_step, state, done, episode_reward, 
             sync_qtog_params(glo.critic, agent.critic)
             sync_qtog_params(glo.critic_target, agent.critic_target)
             sync_qtog_params(glo.policy, agent.policy)
-            log_metrics(i, total_step+1, agent, glo, memory, save_path)
             print(f"qtog_agent{i}: total_steps {total_step + 1}")
 
         if (total_step + 1) % config['gtoq'] == 0:
             sync_gtoq_params(agent.critic, glo.critic)
             sync_gtoq_params(agent.critic_target, glo.critic_target)
             sync_gtoq_params(agent.policy, glo.policy)
-            #log_metrics(i, total_step+1, agent, glo, memory, save_path)
             print(f"gtoq_agent{i}: total_steps {total_step + 1}")
+
+        if (total_step + 1) % 100 == 0:
+            log_metrics(i, total_step+1, agent, glo, memory, save_path)
 
     if len(memory) > config['batch_size']:
         for _ in range(config['updates_per_step']):
