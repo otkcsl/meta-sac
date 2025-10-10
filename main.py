@@ -26,6 +26,7 @@ env_names = {
     "Hopper-v4": 'hopper',
     "HalfCheetah-v4": 'halfcheetah', 
     "Humanoid-v4": 'humanoid',
+    "HumanoidStandup-v4": 'humanoidstandup',
     "Walker2d-v4": 'walker2d',
     "Swimmer-v4": 'swimmer',
     "Reacher-v4": 'reacher'

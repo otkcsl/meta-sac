@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # CSVファイルのパスを指定
-save_path = "models/walker2d/[0.0001, 0.1]/v1/2021"
+save_path = "models/humanoid/[0.0001, 0.1]/v1/2021"
 csv0_path = "eval_metrics0.csv"
 csv1_path = "eval_metrics1.csv"
 

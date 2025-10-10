@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import json
 
 # ==== JSONログをまとめてDataFrameに変換 ====
-save_path = "models/walker2d/[0.0001, 0.1]/v1/2021"
+save_path = "models/humanoid/[0.0001, 0.1]/v1/2021"
 csv0_path = "metrics0.jsonl"
 csv1_path = "metrics1.jsonl"
 json0_path = f"{save_path}/{csv0_path}"
@@ -33,13 +33,13 @@ for metric in metrics:
     plt.xlabel("step")
     plt.ylabel(metric)
     if metric == "agent_critic_target_cos" or metric == "agent_critic_cos" or metric == "agent_policy_cos":
-        plt.ylim(0.9998, 1.00001)  
+        plt.ylim(0.9998, 1.00005)  
     if metric == "agent_critic_l2":
-        plt.ylim(0.7,2)  
+        plt.ylim(0.7,3)  
     if metric == "agent_critic_target_l2":
-        plt.ylim(0.5,1.5)  
+        plt.ylim(0.5,3)  
     if metric == "agent_policy_l2":
-        plt.ylim(1,2)  
+        plt.ylim(1,3)  
     plt.title(f"{metric} vs step")
     plt.legend()
     plt.grid(True)
