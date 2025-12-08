@@ -7,11 +7,10 @@ from model import GaussianPolicy, QNetwork
 
 
 class SAC(object):
-    def __init__(self, num_inputs, action_space, config):
-
+    def __init__(self, num_inputs, action_space, config, alpha):
         self.gamma = config['gamma']
         self.tau = config['tau']
-        self.alpha = config['alpha']
+        self.alpha = alpha
 
         self.policy_type = config['policy']
         self.target_update_interval = config['target_update_interval']
@@ -55,6 +54,11 @@ class SAC(object):
 
         with torch.no_grad():
             next_state_action, next_state_log_pi, _ = self.policy.sample(next_state_batch)
+            # if updates == 50:
+            #     print(self.alpha, reward_batch.mean(), next_state_action.mean())
+            #     policy_weights = torch.cat([p.data.view(-1) for p in self.policy.parameters()])
+            #     print(policy_weights.mean().item())
+            #     print(policy_weights.std().item())
             qf1_next_target, qf2_next_target = self.critic_target(next_state_batch, next_state_action)
             min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - self.alpha * next_state_log_pi
             next_q_value = reward_batch + mask_batch * self.gamma * (min_qf_next_target)

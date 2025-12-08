@@ -40,25 +40,31 @@ if config['exp_id'] != 'debug':
     version = 'v1' if not config['automatic_entropy_tuning'] else 'v2'
     log_file = dir + env_names[config['env_name']] + '_' + version + '.txt'
     print(log_file)
-    sys.stdout = open(log_file, 'w')
+    # sys.stdout = open(log_file, 'w')
 
 current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) 
 save_path = 'models/' + config['exp_id'] + '/' + str(config['alpha']) + '/' + version + '/' + str(config['seed']) + '/'
 print(save_path)
-os.makedirs(save_path)
+os.makedirs(save_path, exist_ok=True)
     
 print(config)
 print(os.getpid())
 
 env = gym.make(config['env_name'])
+env.reset(seed=config['seed'])
+env.action_space.seed(config['seed'])
+env.observation_space.seed(config['seed'])
+
+eval_env = gym.make(config['env_name'])
+eval_env.reset(seed=config['seed'])
+eval_env.action_space.seed(config['seed'])
+eval_env.observation_space.seed(config['seed'])
+
 torch.manual_seed(config['seed'])
 np.random.seed(config['seed'])
 random.seed(config['seed'])
-env.reset(seed=config['seed'])
 #env.seed(config['seed'])
 #env.action_space.np_random.seed(config['seed'])
-env.action_space.seed(config['seed'])
-env.observation_space.seed(config['seed'])
 if torch.cuda.is_available():
     torch.cuda.manual_seed(config['seed'])
     torch.cuda.manual_seed_all(config['seed'])
@@ -66,9 +72,9 @@ if torch.cuda.is_available():
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-agent = SAC(env.observation_space.shape[0], env.action_space, config)
+agent = SAC(env.observation_space.shape[0], env.action_space, config, config['alpha'])
 
-memory = ReplayMemory(config['replay_size'])
+memory = ReplayMemory(config['replay_size'], config['seed'])
 
 temp_step = []
 seed_2021 = []
@@ -99,6 +105,13 @@ for i_episode in itertools.count(1):
 
     acc_log_alpha = 0.
     while not done:
+        
+        torch.manual_seed(config['seed'])
+        np.random.seed(config['seed'])
+        random.seed(config['seed'])
+        
+        if total_numsteps > config['num_steps']:
+            break
         if config['start_steps'] > total_numsteps:
             action = env.action_space.sample()
         else:
@@ -115,11 +128,13 @@ for i_episode in itertools.count(1):
             next_state, reward, terminated, truncated, _ = step_result
             done = terminated or truncated
         else: 
-            next_state, reward, done, _ = step_result
-            
+            next_state, reward, done, _ = step_result   
+        
+        # print(state, action, reward)
         episode_steps += 1
         total_numsteps += 1
         episode_reward += reward
+        # print(total_numsteps, reward)
 
         max_episode_steps = getattr(env, '_max_episode_steps', getattr(env.spec, 'max_episode_steps', 1000))
         mask = 1 if episode_steps == max_episode_steps else float(not done)
@@ -128,12 +143,14 @@ for i_episode in itertools.count(1):
         state = next_state
 
         if total_numsteps > test_step and config['eval'] == True:
+            print("Evaluation Time!")
             test_step += 1000
             avg_reward = 0.
             episodes = 5
             test_part_reward = []
             for j in range(episodes):
-                test_reset_result = env.reset(seed=config['seed']+ j)
+                test_reset_result = eval_env.reset(seed=config['seed']+ j)
+                # print(config['seed']+ j)
                 if isinstance(test_reset_result, tuple):
                     test_state, _ = test_reset_result
                 else:
@@ -141,10 +158,11 @@ for i_episode in itertools.count(1):
                     
                 test_episode_reward = 0
                 test_done = False
+                # print(test_state)
                 while not test_done:
                     test_action = agent.select_action(test_state, eval=True)
                     
-                    test_step_result = env.step(test_action)
+                    test_step_result = eval_env.step(test_action)
                     if len(test_step_result) == 5:
                         test_next_state, test_reward, test_terminated, test_truncated, _ = test_step_result
                         test_done = test_terminated or test_truncated
@@ -176,13 +194,13 @@ for i_episode in itertools.count(1):
             if config['automatic_entropy_tuning']:
                 print("Test Log Alpha: {}".format(agent.log_alpha.item()))
             print("----------------------------------------")
-
+    # print(episode_reward)
     if total_numsteps > config['num_steps']:
         break
 
-    print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {} mean log alpha {}".format(
-        i_episode, total_numsteps, episode_steps, round(episode_reward, 2), acc_log_alpha / episode_steps
-        ))
+    # print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {} mean log alpha {}".format(
+    #     i_episode, total_numsteps, episode_steps, round(episode_reward, 2), acc_log_alpha / episode_steps
+    #     ))
 
 df_eval = pd.DataFrame({
     'step': temp_step,
