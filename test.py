@@ -48,7 +48,7 @@ if config['exp_id'] != 'debug':
     # sys.stdout = open(log_file, 'w')
 
 current_time = time.time()
-save_path = 'models/' + config['exp_id'] + '/' + str(config['alpha']) + '/' + version + '/' + str(config['seed']) + '/'
+save_path = 'models/' + config['exp_id'] + '/' + str(config['alpha']) + '/' + version + '/' + str(config['seed']) + '/' + str(config['teian']) + '/'
 print(save_path)
 os.makedirs(save_path, exist_ok=True)
     
