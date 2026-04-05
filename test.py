@@ -3,7 +3,22 @@ import yaml
 import time
 import pandas as pd
 import json
-config = yaml.safe_load(open(sys.argv[1])) # custom hyperparams
+import argparse
+
+# 引数定義
+parser = argparse.ArgumentParser()
+parser.add_argument("config", type=str)
+parser.add_argument("--cuda", type=int, default=None)
+
+args = parser.parse_args()
+
+# config読み込み
+config = yaml.safe_load(open(args.config))
+
+# override（指定されたときだけ上書き）
+if args.cuda is not None:
+    config["cuda"] = args.cuda
+
 print(config)
 
 import os
