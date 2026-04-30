@@ -116,7 +116,7 @@ def run(i, agent, memory, env, eval_env, config, total_numsteps, episode_steps, 
             sync_gtoq_params(agent.policy, glo.policy)
             print(f"gtoq_agent{i}: total_numstepss {total_numsteps + 1}")
 
-        if (total_numsteps + 1) % 1000 == 0:
+        if (total_numsteps + 1) % 100 == 0:
             log_metrics(i, total_numsteps+1, agent, glo, memory, save_path)
 
     if config['start_steps'] > total_numsteps:
