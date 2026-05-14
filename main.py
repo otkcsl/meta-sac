@@ -63,8 +63,7 @@ eval_env.observation_space.seed(config['seed'])
 torch.manual_seed(config['seed'])
 np.random.seed(config['seed'])
 random.seed(config['seed'])
-#env.seed(config['seed'])
-#env.action_space.np_random.seed(config['seed'])
+
 if torch.cuda.is_available():
     torch.cuda.manual_seed(config['seed'])
     torch.cuda.manual_seed_all(config['seed'])
@@ -97,7 +96,7 @@ for i_episode in itertools.count(1):
     episode_steps = 0
     done = False
     
-    reset_result = env.reset(seed = 42 + total_numsteps)
+    reset_result = env.reset()
     if isinstance(reset_result, tuple):
         state, _ = reset_result  
     else:
@@ -105,11 +104,6 @@ for i_episode in itertools.count(1):
 
     acc_log_alpha = 0.
     while not done:
-        
-        torch.manual_seed(config['seed'])
-        np.random.seed(config['seed'])
-        random.seed(config['seed'])
-        
         if total_numsteps > config['num_steps']:
             break
         if config['start_steps'] > total_numsteps:
