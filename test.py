@@ -281,7 +281,7 @@ test_rewards = {i: [] for i in range(len(agents))}
 test = {i: [] for i in range(len(agents))}
 
 for i in range(len(agents)):
-    agent_states[i], _ = envs[i].reset(seed = 42 + total_numstepss[i])
+    agent_states[i], _ = envs[i].reset()
     agent_dones[i] = False
     agent_episode_reward[i] = 0
     agent_episode_steps[i] = 0
@@ -300,14 +300,10 @@ while not all(total_numstepss[j] > config['num_steps'] for j in range(len(agents
         # print(f"agent{i}: total_numstepss {total_numstepss[i]}")
         if total_numstepss[i] > config['num_steps']:
             continue
-        
-        torch.manual_seed(config['seed'])
-        np.random.seed(config['seed'])
-        random.seed(config['seed'])
 
         if agent_dones[i]:
             # print(agent_episode_reward[i])
-            agent_states[i], _ = envs[i].reset(seed=42 + total_numstepss[i])
+            agent_states[i], _ = envs[i].reset()
             agent_dones[i] = False
             agent_episode_reward[i] = 0
             episode_stepss[i] = 0
