@@ -227,14 +227,12 @@ if torch.cuda.is_available():
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-torch.manual_seed(config['seed'])
 global_agent = {
     f'global': SAC(envs[0].observation_space.shape[0], envs[0].action_space, config, config['alpha'][0])
 }
 
 agents = {}
 for i in range(len(config['alpha'])):
-    torch.manual_seed(config['seed']) 
     agents[f'agent{i}'] = SAC(envs[i].observation_space.shape[0], envs[i].action_space, config, config['alpha'][i])
 
 memories = {
