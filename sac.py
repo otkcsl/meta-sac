@@ -100,7 +100,7 @@ class SAC(object):
             self.alpha_optim.step()
 
             self.alpha = self.log_alpha.exp().item()
-            alpha_tlogs = self.alpha.clone() # For TensorboardX logs
+            alpha_tlogs = self.alpha
         else:
             alpha_loss = torch.tensor(0.).to(self.device)
             alpha_tlogs = torch.tensor(self.alpha) # For TensorboardX logs
