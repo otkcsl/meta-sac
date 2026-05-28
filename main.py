@@ -71,7 +71,7 @@ if torch.cuda.is_available():
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-agent = SAC(env.observation_space.shape[0], env.action_space, config, torch.tensor(config['alpha']))
+agent = SAC(env.observation_space.shape[0], env.action_space, config, config['alpha'])
 
 memory = ReplayMemory(config['replay_size'], config['seed'])
 
