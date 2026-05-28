@@ -110,7 +110,7 @@ class SAC(object):
             soft_update(self.qf1_target, self.qf1, self.tau)
             soft_update(self.qf2_target, self.qf2, self.tau)
 
-        return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), alpha_loss.item(), alpha_tlogs.item()
+        return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), alpha_loss.item(), alpha_tlogs
 
     # Save model parameters    
     def save_model(self, save_path = None, env_name = None, suffix = None):
