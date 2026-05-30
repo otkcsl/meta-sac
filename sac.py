@@ -118,8 +118,10 @@ class SAC(object):
             save_path = './models/'
 
         actor_path = '{}actor_{}_{}'.format(save_path, env_name, suffix)
-        critic_path = "{}critic_{}_{}".format(save_path, env_name, suffix)
-        print('Saving models to {} and {}'.format(actor_path, critic_path))
+        q1_path = "{}q1_{}_{}".format(save_path, env_name, suffix)
+        q2_path = "{}q2_{}_{}".format(save_path, env_name, suffix)
+        print('Saving models to {} and {}'.format(actor_path, q1_path, q2_path))
         torch.save(self.policy.state_dict(), actor_path)
-        torch.save(self.critic.state_dict(), critic_path)
+        torch.save(self.qf1.state_dict(), q1_path)
+        torch.save(self.qf2.state_dict(), q2_path)
 
