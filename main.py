@@ -162,7 +162,7 @@ for i_episode in itertools.count(1):
                 test_episode = 0
                 # print(test_state)
                 while not test_done:
-                    test_action = agent.select_action(test_state, eval=True)
+                    test_action = agent.select_action(test_state)
                     
                     test_step_result = eval_env.step(test_action)
                     if len(test_step_result) == 5:
