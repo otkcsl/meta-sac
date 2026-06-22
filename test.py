@@ -155,6 +155,7 @@ def run(i, agent, memory, env, eval_env, config, total_numsteps, episode_steps, 
         avg_reward = 0.
         episodes = 5
         test_part_reward = []
+        test_episode_steps = []
         for j in range(episodes):
             test_reset_result = eval_env.reset(seed=config['seed']+ j)
             if isinstance(test_reset_result, tuple):
@@ -164,6 +165,7 @@ def run(i, agent, memory, env, eval_env, config, total_numsteps, episode_steps, 
                 
             test_episode_reward = 0
             test_done = False
+            test_episode = 0
             # print(test_state)
             while not test_done:
                 test_action = agent.select_action(test_state, eval=True)
@@ -177,8 +179,11 @@ def run(i, agent, memory, env, eval_env, config, total_numsteps, episode_steps, 
                     
                 test_episode_reward += test_reward
                 test_state = test_next_state
+                test_episode += 1
             test_part_reward.append(test_episode_reward)
+            test_episode_steps.append(test_episode)
         print(test_part_reward)
+        print(test_episode_steps)
 
         avg_reward = np.mean(test_part_reward)
 
@@ -189,6 +194,11 @@ def run(i, agent, memory, env, eval_env, config, total_numsteps, episode_steps, 
         seed_2024[index].append(test_part_reward[3])
         seed_2025[index].append(test_part_reward[4])
         avg_rewards[index].append(avg_reward)
+        seed_2021_episode[index].append(test_episode_steps[0])
+        seed_2022_episode[index].append(test_episode_steps[1])
+        seed_2023_episode[index].append(test_episode_steps[2])
+        seed_2024_episode[index].append(test_episode_steps[3])
+        seed_2025_episode[index].append(test_episode_steps[4])
         policy_losses[index].append(policy_loss if 'policy_loss' in locals() else None)
         critic_1_losses[index].append(critic_1_loss if 'critic_1_loss' in locals() else None)
         critic_2_losses[index].append(critic_2_loss if 'critic_2_loss' in locals() else None)
@@ -253,6 +263,11 @@ seed_2022 = [[] for _ in range(len(agents))]
 seed_2023 = [[] for _ in range(len(agents))]
 seed_2024 = [[] for _ in range(len(agents))]
 seed_2025 = [[] for _ in range(len(agents))]
+seed_2021_episode = [[] for _ in range(len(agents))]
+seed_2022_episode = [[] for _ in range(len(agents))]
+seed_2023_episode = [[] for _ in range(len(agents))]
+seed_2024_episode = [[] for _ in range(len(agents))]
+seed_2025_episode = [[] for _ in range(len(agents))]
 avg_rewards = [[] for _ in range(len(agents))]
 policy_losses = [[] for _ in range(len(agents))]
 critic_1_losses = [[] for _ in range(len(agents))]
@@ -322,6 +337,11 @@ for i in range(len(agents)):
         'seed_2023': seed_2023[i],
         'seed_2024': seed_2024[i],
         'seed_2025': seed_2025[i],
+        'seed_2021_episode': seed_2021_episode[i],
+        'seed_2022_episode': seed_2022_episode[i],
+        'seed_2023_episode': seed_2023_episode[i],
+        'seed_2024_episode': seed_2024_episode[i],
+        'seed_2025_episode': seed_2025_episode[i],
         'avg_reward': avg_rewards[i],
         'policy_loss': policy_losses[i],
         'critic1_loss': critic_1_losses[i],
