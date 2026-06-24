@@ -194,15 +194,21 @@ def log_metrics(i, step, agent, global_agent, memories, save_path):
 def log_sum_metrics(step, agent_0, agent_1, memories, save_path):
     entry = {'step': step}
     l2_p, cos_p = param_l2_cosine(agent_0.policy, agent_1.policy)
-    l2_c, cos_c = param_l2_cosine(agent_0.critic, agent_1.critic)
-    l2_t, cos_t = param_l2_cosine(agent_0.critic_target, agent_1.critic_target)
+    l2_c, cos_c = param_l2_cosine(agent_0.qf1, agent_1.qf1)
+    l2_q, cos_q = param_l2_cosine(agent_0.qf2, agent_1.qf2)
+    l2_ct, cos_ct = param_l2_cosine(agent_0.qf1_target, agent_1.qf1_target)
+    l2_qt, cos_qt = param_l2_cosine(agent_0.qf2_target, agent_1.qf2_target)
     entry['agent_policy_l2'] = l2_p
     entry['agent_policy_cos'] = cos_p
     entry['agent_critic_l2'] = l2_c
     entry['agent_critic_cos'] = cos_c
-    entry['agent_critic_target_l2'] = l2_t
-    entry['agent_critic_target_cos'] = cos_t
-    
+    entry['agent_critic2_l2'] = l2_q
+    entry['agent_critic2_cos'] = cos_q
+    entry['agent_critic_target_l2'] = l2_ct
+    entry['agent_critic_target_cos'] = cos_ct
+    entry['agent_critic2_target_l2'] = l2_qt
+    entry['agent_critic2_target_cos'] = cos_qt
+
     metrics_fp = os.path.join(save_path, f'metrics_sum.jsonl')
     with open(metrics_fp, 'a') as f:
         f.write(json.dumps(entry) + '\n')
