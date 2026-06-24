@@ -350,6 +350,7 @@ for i in range(len(agents)):
         'alpha': sum_alphas[i]
     })
     df_eval.to_csv(os.path.join(save_path, f'eval_metrics{i}.csv'), index=False)
+    agents[f"agent{i}"].save_model(save_path, config['env_name'], suffix=f"agent{i}")
 
 end_time = time.time()
 experiment_summary = {
