@@ -105,14 +105,18 @@ def sync_qtog_params(target, source):
 def run(i, agent, memory, env, eval_env, config, total_numsteps, episode_steps, state, done, episode_reward, test, test_rewards, critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha, updates, agent_acc_log_alpha, glo, index, test_step):
     if config['teian'] == True:
         if (total_numsteps + 1) % config['qtog'] == 0:
-            sync_qtog_params(glo.critic, agent.critic)
-            sync_qtog_params(glo.critic_target, agent.critic_target)
+            sync_qtog_params(glo.qf1, agent.qf1)
+            sync_qtog_params(glo.qf2, agent.qf2)
+            sync_qtog_params(glo.qf1_target, agent.qf1_target)
+            sync_qtog_params(glo.qf2_target, agent.qf2_target)
             sync_qtog_params(glo.policy, agent.policy)
             print(f"qtog_agent{i}: total_numstepss {total_numsteps + 1}")
 
         if (total_numsteps + 1) % config['gtoq'] == 0:
-            sync_gtoq_params(agent.critic, glo.critic)
-            sync_gtoq_params(agent.critic_target, glo.critic_target)
+            sync_gtoq_params(agent.qf1, glo.qf1)
+            sync_gtoq_params(agent.qf2, glo.qf2)
+            sync_gtoq_params(agent.qf1_target, glo.qf1_target)
+            sync_gtoq_params(agent.qf2_target, glo.qf2_target)
             sync_gtoq_params(agent.policy, glo.policy)
             print(f"gtoq_agent{i}: total_numstepss {total_numsteps + 1}")
 
@@ -253,8 +257,10 @@ memories = {
 if config['teian'] == True:
     for i in range(len(agents)):
         print(f'sync agent{i} parameters')
-        sync_gtoq_params(agents[f'agent{i}'].critic, global_agent['global'].critic)
-        sync_gtoq_params(agents[f'agent{i}'].critic_target, global_agent['global'].critic_target)
+        sync_gtoq_params(agents[f'agent{i}'].qf1, global_agent['global'].qf1)
+        sync_gtoq_params(agents[f'agent{i}'].qf2, global_agent['global'].qf2)
+        sync_gtoq_params(agents[f'agent{i}'].qf1_target, global_agent['global'].qf1_target)
+        sync_gtoq_params(agents[f'agent{i}'].qf2_target, global_agent['global'].qf2_target)
         sync_gtoq_params(agents[f'agent{i}'].policy, global_agent['global'].policy)
 
 temp_step = [[] for _ in range(len(agents))]

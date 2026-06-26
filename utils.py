@@ -152,14 +152,20 @@ def log_metrics(i, step, agent, global_agent, memories, save_path):
     entry = {'step': step}
     # 1) パラメータ差分（policy と critic の L2 と cosine）
     l2_p, cos_p = param_l2_cosine(agent.policy, global_agent.policy)
-    l2_c, cos_c = param_l2_cosine(agent.critic, global_agent.critic)
-    l2_t, cos_t = param_l2_cosine(agent.critic_target, global_agent.critic_target)
+    l2_c, cos_c = param_l2_cosine(agent.qf1, global_agent.qf1)
+    l2_c2, cos_c2 = param_l2_cosine(agent.qf2, global_agent.qf2)
+    l2_t, cos_t = param_l2_cosine(agent.qf1_target, global_agent.qf1_target)
+    l2_t2, cos_t2 = param_l2_cosine(agent.qf2_target, global_agent.qf2_target)
     entry['agent_policy_l2'] = l2_p
     entry['agent_policy_cos'] = cos_p
     entry['agent_critic_l2'] = l2_c
     entry['agent_critic_cos'] = cos_c
+    entry['agent_critic2_l2'] = l2_c2
+    entry['agent_critic2_cos'] = cos_c2
     entry['agent_critic_target_l2'] = l2_t
     entry['agent_critic_target_cos'] = cos_t
+    entry['agent_critic2_target_l2'] = l2_t2
+    entry['agent_critic2_target_cos'] = cos_t2
 
     # # 2) Qの不一致（軽め：固定states 256）
     # # choose a memory that is not empty
