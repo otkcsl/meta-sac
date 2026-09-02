@@ -9,6 +9,12 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("config", type=str)
 parser.add_argument("--cuda", type=int, default=None)
+parser.add_argument(
+    "--output",
+    type=str,
+    default=None,
+    help="Directory to save results"
+)
 
 args = parser.parse_args()
 
@@ -63,7 +69,10 @@ if config['exp_id'] != 'debug':
     # sys.stdout = open(log_file, 'w')
 
 current_time = time.time()
-save_path = 'models/' + config['exp_id'] + '/' + str(config['alpha']) + '/' + version + '/' + str(config['seed']) + '/' + str(config['teian']) + '/'
+if args.output is None:
+    save_path = 'models/' + config['exp_id'] + '/' + str(config['alpha']) + '/' + version + '/' + str(config['seed']) + '/' + str(config['teian']) + '/'
+else:
+    save_path = args.output
 print(save_path)
 os.makedirs(save_path, exist_ok=True)
     
