@@ -105,14 +105,18 @@ def sync_qtog_params(target, source):
 def run(i, agent, memory, env, eval_env, config, total_numsteps, episode_steps, state, done, episode_reward, test, test_rewards, critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha, updates, agent_acc_log_alpha, glo, index, test_step):
     if config['teian'] == True:
         if (total_numsteps + 1) % config['qtog'] == 0:
-            sync_qtog_params(glo.critic, agent.critic)
-            sync_qtog_params(glo.critic_target, agent.critic_target)
+            sync_qtog_params(glo.qf1, agent.qf1)
+            sync_qtog_params(glo.qf2, agent.qf2)
+            sync_qtog_params(glo.qf1_target, agent.qf1_target)
+            sync_qtog_params(glo.qf2_target, agent.qf2_target)
             sync_qtog_params(glo.policy, agent.policy)
             print(f"qtog_agent{i}: total_numstepss {total_numsteps + 1}")
 
         if (total_numsteps + 1) % config['gtoq'] == 0:
-            sync_gtoq_params(agent.critic, glo.critic)
-            sync_gtoq_params(agent.critic_target, glo.critic_target)
+            sync_gtoq_params(agent.qf1, glo.qf1)
+            sync_gtoq_params(agent.qf2, glo.qf2)
+            sync_gtoq_params(agent.qf1_target, glo.qf1_target)
+            sync_gtoq_params(agent.qf2_target, glo.qf2_target)
             sync_gtoq_params(agent.policy, glo.policy)
             print(f"gtoq_agent{i}: total_numstepss {total_numsteps + 1}")
 
@@ -155,6 +159,7 @@ def run(i, agent, memory, env, eval_env, config, total_numsteps, episode_steps, 
         avg_reward = 0.
         episodes = 5
         test_part_reward = []
+        test_episode_steps = []
         for j in range(episodes):
             test_reset_result = eval_env.reset(seed=config['seed']+ j)
             if isinstance(test_reset_result, tuple):
@@ -164,6 +169,7 @@ def run(i, agent, memory, env, eval_env, config, total_numsteps, episode_steps, 
                 
             test_episode_reward = 0
             test_done = False
+            test_episode = 0
             # print(test_state)
             while not test_done:
                 test_action = agent.select_action(test_state, eval=True)
@@ -177,8 +183,11 @@ def run(i, agent, memory, env, eval_env, config, total_numsteps, episode_steps, 
                     
                 test_episode_reward += test_reward
                 test_state = test_next_state
+                test_episode += 1
             test_part_reward.append(test_episode_reward)
+            test_episode_steps.append(test_episode)
         print(test_part_reward)
+        print(test_episode_steps)
 
         avg_reward = np.mean(test_part_reward)
 
@@ -189,6 +198,11 @@ def run(i, agent, memory, env, eval_env, config, total_numsteps, episode_steps, 
         seed_2024[index].append(test_part_reward[3])
         seed_2025[index].append(test_part_reward[4])
         avg_rewards[index].append(avg_reward)
+        seed_2021_episode[index].append(test_episode_steps[0])
+        seed_2022_episode[index].append(test_episode_steps[1])
+        seed_2023_episode[index].append(test_episode_steps[2])
+        seed_2024_episode[index].append(test_episode_steps[3])
+        seed_2025_episode[index].append(test_episode_steps[4])
         policy_losses[index].append(policy_loss if 'policy_loss' in locals() else None)
         critic_1_losses[index].append(critic_1_loss if 'critic_1_loss' in locals() else None)
         critic_2_losses[index].append(critic_2_loss if 'critic_2_loss' in locals() else None)
@@ -227,14 +241,12 @@ if torch.cuda.is_available():
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-torch.manual_seed(config['seed'])
 global_agent = {
     f'global': SAC(envs[0].observation_space.shape[0], envs[0].action_space, config, config['alpha'][0])
 }
 
 agents = {}
 for i in range(len(config['alpha'])):
-    torch.manual_seed(config['seed']) 
     agents[f'agent{i}'] = SAC(envs[i].observation_space.shape[0], envs[i].action_space, config, config['alpha'][i])
 
 memories = {
@@ -245,8 +257,10 @@ memories = {
 if config['teian'] == True:
     for i in range(len(agents)):
         print(f'sync agent{i} parameters')
-        sync_gtoq_params(agents[f'agent{i}'].critic, global_agent['global'].critic)
-        sync_gtoq_params(agents[f'agent{i}'].critic_target, global_agent['global'].critic_target)
+        sync_gtoq_params(agents[f'agent{i}'].qf1, global_agent['global'].qf1)
+        sync_gtoq_params(agents[f'agent{i}'].qf2, global_agent['global'].qf2)
+        sync_gtoq_params(agents[f'agent{i}'].qf1_target, global_agent['global'].qf1_target)
+        sync_gtoq_params(agents[f'agent{i}'].qf2_target, global_agent['global'].qf2_target)
         sync_gtoq_params(agents[f'agent{i}'].policy, global_agent['global'].policy)
 
 temp_step = [[] for _ in range(len(agents))]
@@ -255,6 +269,11 @@ seed_2022 = [[] for _ in range(len(agents))]
 seed_2023 = [[] for _ in range(len(agents))]
 seed_2024 = [[] for _ in range(len(agents))]
 seed_2025 = [[] for _ in range(len(agents))]
+seed_2021_episode = [[] for _ in range(len(agents))]
+seed_2022_episode = [[] for _ in range(len(agents))]
+seed_2023_episode = [[] for _ in range(len(agents))]
+seed_2024_episode = [[] for _ in range(len(agents))]
+seed_2025_episode = [[] for _ in range(len(agents))]
 avg_rewards = [[] for _ in range(len(agents))]
 policy_losses = [[] for _ in range(len(agents))]
 critic_1_losses = [[] for _ in range(len(agents))]
@@ -281,7 +300,7 @@ test_rewards = {i: [] for i in range(len(agents))}
 test = {i: [] for i in range(len(agents))}
 
 for i in range(len(agents)):
-    agent_states[i], _ = envs[i].reset(seed = 42 + total_numstepss[i])
+    agent_states[i], _ = envs[i].reset()
     agent_dones[i] = False
     agent_episode_reward[i] = 0
     agent_episode_steps[i] = 0
@@ -300,14 +319,10 @@ while not all(total_numstepss[j] > config['num_steps'] for j in range(len(agents
         # print(f"agent{i}: total_numstepss {total_numstepss[i]}")
         if total_numstepss[i] > config['num_steps']:
             continue
-        
-        torch.manual_seed(config['seed'])
-        np.random.seed(config['seed'])
-        random.seed(config['seed'])
 
         if agent_dones[i]:
             # print(agent_episode_reward[i])
-            agent_states[i], _ = envs[i].reset(seed=42 + total_numstepss[i])
+            agent_states[i], _ = envs[i].reset()
             agent_dones[i] = False
             agent_episode_reward[i] = 0
             episode_stepss[i] = 0
@@ -328,6 +343,11 @@ for i in range(len(agents)):
         'seed_2023': seed_2023[i],
         'seed_2024': seed_2024[i],
         'seed_2025': seed_2025[i],
+        'seed_2021_episode': seed_2021_episode[i],
+        'seed_2022_episode': seed_2022_episode[i],
+        'seed_2023_episode': seed_2023_episode[i],
+        'seed_2024_episode': seed_2024_episode[i],
+        'seed_2025_episode': seed_2025_episode[i],
         'avg_reward': avg_rewards[i],
         'policy_loss': policy_losses[i],
         'critic1_loss': critic_1_losses[i],
@@ -336,6 +356,7 @@ for i in range(len(agents)):
         'alpha': sum_alphas[i]
     })
     df_eval.to_csv(os.path.join(save_path, f'eval_metrics{i}.csv'), index=False)
+    agents[f"agent{i}"].save_model(save_path, config['env_name'], suffix=f"agent{i}")
 
 end_time = time.time()
 experiment_summary = {

@@ -63,8 +63,7 @@ eval_env.observation_space.seed(config['seed'])
 torch.manual_seed(config['seed'])
 np.random.seed(config['seed'])
 random.seed(config['seed'])
-#env.seed(config['seed'])
-#env.action_space.np_random.seed(config['seed'])
+
 if torch.cuda.is_available():
     torch.cuda.manual_seed(config['seed'])
     torch.cuda.manual_seed_all(config['seed'])
@@ -72,7 +71,7 @@ if torch.cuda.is_available():
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-agent = SAC(env.observation_space.shape[0], env.action_space, config, torch.tensor(config['alpha']))
+agent = SAC(env.observation_space.shape[0], env.action_space, config, config['alpha'])
 
 memory = ReplayMemory(config['replay_size'], config['seed'])
 
@@ -83,6 +82,11 @@ seed_2023 = []
 seed_2024 = []
 seed_2025 = []
 avg_rewards = []
+seed_2021_episode = []
+seed_2022_episode = []
+seed_2023_episode = []
+seed_2024_episode = []
+seed_2025_episode = []
 policy_losses = []
 critic_1_losses = []
 critic_2_losses = []
@@ -97,7 +101,7 @@ for i_episode in itertools.count(1):
     episode_steps = 0
     done = False
     
-    reset_result = env.reset(seed = 42 + total_numsteps)
+    reset_result = env.reset()
     if isinstance(reset_result, tuple):
         state, _ = reset_result  
     else:
@@ -105,11 +109,6 @@ for i_episode in itertools.count(1):
 
     acc_log_alpha = 0.
     while not done:
-        
-        torch.manual_seed(config['seed'])
-        np.random.seed(config['seed'])
-        random.seed(config['seed'])
-        
         if total_numsteps > config['num_steps']:
             break
         if config['start_steps'] > total_numsteps:
@@ -141,6 +140,7 @@ for i_episode in itertools.count(1):
 
         memory.push(state, action, reward, next_state, mask)
         state = next_state
+        # print(mask)
 
         if total_numsteps > test_step and config['eval'] == True:
             print("Evaluation Time!")
@@ -148,6 +148,7 @@ for i_episode in itertools.count(1):
             avg_reward = 0.
             episodes = 5
             test_part_reward = []
+            test_episode_steps = []
             for j in range(episodes):
                 test_reset_result = eval_env.reset(seed=config['seed']+ j)
                 # print(config['seed']+ j)
@@ -158,6 +159,7 @@ for i_episode in itertools.count(1):
                     
                 test_episode_reward = 0
                 test_done = False
+                test_episode = 0
                 # print(test_state)
                 while not test_done:
                     test_action = agent.select_action(test_state, eval=True)
@@ -171,8 +173,11 @@ for i_episode in itertools.count(1):
                         
                     test_episode_reward += test_reward
                     test_state = test_next_state
+                    test_episode += 1
                 test_part_reward.append(test_episode_reward)
+                test_episode_steps.append(test_episode)
             print(test_part_reward)
+            print(test_episode_steps)
 
             avg_reward = np.mean(test_part_reward)
 
@@ -183,6 +188,11 @@ for i_episode in itertools.count(1):
             seed_2024.append(test_part_reward[3])
             seed_2025.append(test_part_reward[4])
             avg_rewards.append(avg_reward)
+            seed_2021_episode.append(test_episode_steps[0])
+            seed_2022_episode.append(test_episode_steps[1])
+            seed_2023_episode.append(test_episode_steps[2])
+            seed_2024_episode.append(test_episode_steps[3])
+            seed_2025_episode.append(test_episode_steps[4])
             policy_losses.append(policy_loss if 'policy_loss' in locals() else None)
             critic_1_losses.append(critic_1_loss if 'critic_1_loss' in locals() else None)
             critic_2_losses.append(critic_2_loss if 'critic_2_loss' in locals() else None)
@@ -210,6 +220,11 @@ df_eval = pd.DataFrame({
     'seed_2024': seed_2024,
     'seed_2025': seed_2025,
     'avg_reward': avg_rewards,
+    'seed_2021_episode': seed_2021_episode,
+    'seed_2022_episode': seed_2022_episode,
+    'seed_2023_episode': seed_2023_episode,
+    'seed_2024_episode': seed_2024_episode,
+    'seed_2025_episode': seed_2025_episode,
     'policy_loss': policy_losses,
     'critic1_loss': critic_1_losses,
     'critic2_loss': critic_2_losses,
