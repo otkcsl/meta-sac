@@ -1,7 +1,35 @@
 import sys
 import yaml
+import json
+import time
+import argparse
 import pandas as pd
-config = yaml.safe_load(open(sys.argv[1])) # custom hyperparams
+
+# 引数定義（proposed_main.py と同じ形。スイープを for ループ1本で回せるようにする）
+parser = argparse.ArgumentParser()
+parser.add_argument("config", type=str)
+parser.add_argument("--cuda", type=int, default=None)
+parser.add_argument("--seed", type=int, default=None)
+parser.add_argument("--alpha", type=float, default=None)
+parser.add_argument("--num_steps", type=int, default=None)
+parser.add_argument("--exp_id", type=str, default=None)
+
+args = parser.parse_args()
+
+config = yaml.safe_load(open(args.config)) # custom hyperparams
+
+# override（指定されたときだけ上書き）
+if args.cuda is not None:
+    config["cuda"] = args.cuda
+if args.seed is not None:
+    config["seed"] = args.seed
+if args.alpha is not None:
+    config["alpha"] = args.alpha
+if args.num_steps is not None:
+    config["num_steps"] = args.num_steps
+if args.exp_id is not None:
+    config["exp_id"] = args.exp_id
+
 print(config)
 
 import os
@@ -28,24 +56,32 @@ env_names = {
     "Humanoid-v4": 'humanoid',
     "Walker2d-v4": 'walker2d',
     "Swimmer-v4": 'swimmer',
-    "Reacher-v4": 'reacher'
+    "Reacher-v4": 'reacher', "Pusher-v4": 'pusher'
 }
 
 import time
 
 
+version = 'v1' if not config['automatic_entropy_tuning'] else 'v2'
+
 if config['exp_id'] != 'debug':
     dir = '../common/vanilla_SAC_log/{}/'.format(config['seed'])
     os.makedirs(dir, exist_ok=True)
-    version = 'v1' if not config['automatic_entropy_tuning'] else 'v2'
     log_file = dir + env_names[config['env_name']] + '_' + version + '.txt'
     print(log_file)
     # sys.stdout = open(log_file, 'w')
 
-current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) 
+start_time = time.time()
+current_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
 save_path = 'models/' + config['exp_id'] + '/' + str(config['alpha']) + '/' + version + '/' + str(config['seed']) + '/'
 print(save_path)
 os.makedirs(save_path, exist_ok=True)
+# 実行を始めた時点で、このディレクトリが何の設定の実行かを残す。集約スクリプトがこれを読む。
+# かかった時間は同時に回す本数で変わり手法の比較に使えないので、記録しない
+summary_path = os.path.join(save_path, 'experiment_summary.json')
+with open(summary_path, 'w') as f:
+    json.dump({'config_contents': config}, f, indent=2)
+print(f"Experiment summary saved to: {summary_path}")
     
 print(config)
 print(os.getpid())
