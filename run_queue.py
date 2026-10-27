@@ -21,6 +21,10 @@ v1 README の「主張と実験の記録」の E8 を、実行待ちの一覧に
 止めたあと同じコマンドで再開すると、終わった実行は飛ばす。
 終わったかどうかは各サーバのディスクで判定するので、1つのタスクは1台だけで回す。
 
+走っている学習を止めずに一覧を差し替えるときは、Ctrl-C ではなく `kill <run_queue.py の PID>` で親だけを止める。
+Ctrl-C は screen の中のプロセスすべてに届き、学習も止まる。kill は親にしか届かないので、学習は走り続ける。
+そのあと `plan` と `run` を実行すると、run は同じ引数で走っている学習を見つけて、新しく始めずに終わるのを待つ。
+
 出力:
 
     models/e8_{タスク}/...            各実行の結果。main.py / proposed_main.py が書く
@@ -37,10 +41,13 @@ import argparse
 import csv
 import datetime
 import os
+import signal
 import socket
 import subprocess
 import sys
 import time
+
+import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 QUEUE_DIR = os.path.join('models', '_queue')
@@ -55,14 +62,16 @@ LOG_DIR = os.path.join(QUEUE_DIR, 'logs')
 # 環境 ID → (config の名前, 1体あたりの学習ステップ数)。並びは1本の時間が長い順
 TASKS = {
     'Humanoid-v4': ('humanoid', 10_000_000),
-    'Walker2d-v4': ('walker2d', 10_000_000),
+    'Walker2d-v4': ('walker2d', 3_000_000),  # 2026-10-27 に 10M から変えた。v1 README の E8
     'Hopper-v4': ('hopper', 3_000_000),
     'HalfCheetah-v4': ('halfcheetah', 3_000_000),
     'Reacher-v4': ('reacher', 1_000_000),
     'Pusher-v4': ('pusher', 1_000_000),
 }
 
-SEEDS = [2021, 2022, 2023, 2024, 2025]
+# 2026-10-27 から、全タスクを先に3シードで揃える。12-15 までに間に合うサーバから LATER_SEEDS を足して plan し直す
+SEEDS = [2021, 2022, 2023]
+LATER_SEEDS = [2024, 2025]
 
 # 提案手法の3設定：中間発表の 153 設定の Reacher スコア上位3つ
 SETTINGS = [
@@ -134,7 +143,10 @@ def sac_job(version, env, seed, alpha=None, phase='main'):
         args += ['--alpha', str(alpha)]
         alpha_dir = str(float(alpha))
     else:
-        alpha_dir = '0.2'  # configs/*2.yml の alpha。SAC-v2 では初期値で、学習中に自動で調整される
+        # configs/*2.yml の alpha。SAC-v2 では初期値で、学習中に自動で調整される。
+        # main.py は保存先にこの値を使うので、決め打ちせずに設定ファイルから読む
+        with open(config) as f:
+            alpha_dir = str(yaml.safe_load(f)['alpha'])
     save_dir = f'models/{exp_id}/{alpha_dir}/{version}/{seed}/'
     tag = f'sacv1a{alpha}' if version == 'v1' else 'sacv2'
     return dict(job_id=f'{tag}-{name}-{seed}', phase=phase, method=f'sac-{version}', env=env, seed=seed,
@@ -214,6 +226,32 @@ def is_done(job):
     return all(os.path.isfile(os.path.join(job['save_dir'], n)) for n in names)
 
 
+def find_running(jobs):
+    """前の run が残した学習プロセスを探す。{job_id: (pid, 開始時刻)} を返す。
+
+    このディレクトリで、job['cmd'] と同じ引数で動いている Python を同じ実行とみなす。
+    run は --cuda を後ろに足すので、先頭が一致すればよい。作業ディレクトリが読めない他人のプロセスは見ない。
+    """
+    wanted = {tuple(j['cmd'].split(' ')): j['job_id'] for j in jobs}
+    with open('/proc/stat') as f:
+        btime = next(int(line.split()[1]) for line in f if line.startswith('btime'))
+    found = {}
+    for pid in filter(str.isdigit, os.listdir('/proc')):
+        try:
+            if os.path.realpath(f'/proc/{pid}/cwd') != os.path.realpath(HERE):
+                continue
+            with open(f'/proc/{pid}/cmdline', 'rb') as f:
+                args = f.read().decode().split('\0')[1:]  # 先頭の python を除く
+            with open(f'/proc/{pid}/stat') as f:
+                ticks = int(f.read().rsplit(')', 1)[1].split()[19])  # 22番目の項目 starttime。起動からの clock tick
+        except OSError:
+            continue  # 途中で終わったプロセスや、読めないプロセス
+        for key, job_id in wanted.items():
+            if tuple(args[:len(key)]) == key:
+                found[job_id] = (int(pid), btime + ticks / os.sysconf('SC_CLK_TCK'))
+    return found
+
+
 def append_run(row):
     new = not os.path.exists(RUNS_CSV)
     with open(RUNS_CSV, 'a', newline='') as f:
@@ -253,13 +291,25 @@ def cmd_plan(args):
     pending = [e for e, a in SAC_V1_ALPHA.items() if a is None]
     if pending:
         print(f'  SAC-v1 の最良 α が未定のタスク: {", ".join(pending)}。'
-              'α 選びの結果を見て SAC_V1_ALPHA に書き、もう一度 plan を実行すると 2022〜2025 が加わる')
+              'α 選びの結果を見て SAC_V1_ALPHA に書き、もう一度 plan を実行すると 2022 以降が加わる')
     print('  サーバごとの本数:')
     for server, envs in SERVER_TASKS.items():
         n = sum(1 for j in jobs if j['env'] in envs)
         print(f'    {server}番サーバ  {n:>3} 本  {", ".join(envs)}')
     done = sum(is_done(j) for j in jobs)
     print(f'  うち、このサーバで終わっているもの: {done} 本')
+
+
+def poll(proc):
+    """終わっていなければ None、終わっていれば終了コードを返す。引き継いだ PID の終了コードは分からないので ''。"""
+    if isinstance(proc, subprocess.Popen):
+        return proc.poll()
+    try:
+        with open(f'/proc/{proc}/stat') as f:
+            state = f.read().rsplit(')', 1)[1].split()[0]
+    except OSError:
+        return ''
+    return '' if state == 'Z' else None
 
 
 def cmd_run(args):
@@ -270,10 +320,16 @@ def cmd_run(args):
     print(f'[{now()}] 一覧 {len(jobs)} 本のうち、終わっていない {len(todo)} 本を同時に {args.workers} 本ずつ回す', flush=True)
     os.makedirs(LOG_DIR, exist_ok=True)
 
-    running = []  # (job, Popen, 開始時刻, ログのパス, ログのファイル)
+    running = []  # (job, Popen か前の run が残したプロセスの PID, 開始時刻, ログのパス, ログのファイル)
     failed = []
     try:
         while todo or running:
+            # 前の run が残した学習は始め直さず、枠に数えて終わるのを待つ。ログは前の run が開いたものに書かれ続ける
+            for job_id, (pid, t0) in find_running(todo).items():
+                job = next(j for j in todo if j['job_id'] == job_id)
+                todo.remove(job)
+                running.append((job, pid, t0, os.path.join(LOG_DIR, f'{job_id}.log'), None))
+                print(f'[{now()}] 引き継ぎ {job_id}  PID {pid}', flush=True)
             while todo and len(running) < args.workers:
                 job = todo.pop(0)
                 cmd = [sys.executable] + job['cmd'].split(' ')
@@ -287,17 +343,20 @@ def cmd_run(args):
             time.sleep(args.poll)
             for item in list(running):
                 job, proc, t0, log_path, log = item
-                if proc.poll() is None:
+                returncode = poll(proc)
+                if returncode is None:
                     continue
                 running.remove(item)
-                log.close()
-                ok = proc.returncode == 0 and is_done(job)
+                if log:
+                    log.close()
+                # 引き継いだ実行は終了コードが分からないので、eval_metrics*.csv が揃ったかだけで判定する
+                ok = returncode in (0, '') and is_done(job)
                 status = 'done' if ok else 'failed'
                 append_run(dict(job_id=job['job_id'], method=job['method'], env=job['env'], seed=job['seed'],
                                 server=server_of(job['env']), host=host,
                                 start=datetime.datetime.fromtimestamp(t0).strftime('%Y-%m-%d %H:%M:%S'),
-                                end=now(), seconds=round(time.time() - t0), returncode=proc.returncode,
-                                status=status, cuda='' if args.cuda is None else args.cuda,
+                                end=now(), seconds=round(time.time() - t0), returncode=returncode,
+                                status=status, cuda='' if args.cuda is None or log is None else args.cuda,
                                 save_dir=job['save_dir'], log=log_path))
                 if not ok:
                     failed.append(job['job_id'])
@@ -306,8 +365,14 @@ def cmd_run(args):
     except KeyboardInterrupt:
         # 止めたときは動いている実行も止める。CSV が無いので、次の run でもう一度回る
         for job, proc, t0, log_path, log in running:
-            proc.terminate()
-            log.close()
+            if log:
+                proc.terminate()
+                log.close()
+            else:
+                try:
+                    os.kill(proc, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass  # ちょうど終わっていた
             append_run(dict(job_id=job['job_id'], method=job['method'], env=job['env'], seed=job['seed'],
                             server=server_of(job['env']), host=host,
                             start=datetime.datetime.fromtimestamp(t0).strftime('%Y-%m-%d %H:%M:%S'),

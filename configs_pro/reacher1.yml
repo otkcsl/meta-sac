@@ -14,7 +14,7 @@ lr: 0.0003
 num_steps: 250000
 policy: Gaussian
 replay_size: 1000000
-seed: 2022
+seed: 2021
 start_steps: 10000
 target_update_interval: 1
 tau: 0.005
