@@ -96,9 +96,15 @@ SAC_V1_ALPHA = {
     'Walker2d-v4': 0.01,
     'Humanoid-v4': 0.2,
     'HalfCheetah-v4': None,
-    'Pusher-v4': None,
+    'Pusher-v4': 0.01,  # 2026-11-04 に α 選びの結果で決めた。v1 README の E8
 }
 SWEEP_ALPHAS = [0.0001, 0.01, 0.05, 0.1, 0.2]
+# 2026-11-04 に足した。HalfCheetah は 0.2 まで点数が上がり続け、最良が範囲の端だった。v1 README の E8
+EXTRA_SWEEP_ALPHAS = {'HalfCheetah-v4': [0.3, 0.4]}
+
+
+def sweep_alphas(env):
+    return SWEEP_ALPHAS + EXTRA_SWEEP_ALPHAS.get(env, [])
 
 # 研究室サーバ3台への振り分け。サーバどうしはつながっていないので、タスクごとに1台へ割り当てる。
 # 3台は同じ設定・同じシードで結果が一致することを確認済み（ユーザ、2026-10-18）。
@@ -159,7 +165,7 @@ def build_jobs():
     for env in TASKS:
         # SAC-v1 の α 選び。結果が出ないと残りのシードを決められないので、一覧の先頭に置く
         if SAC_V1_ALPHA[env] is None:
-            sweep += [sac_job('v1', env, 2021, a, phase='alpha-sweep') for a in SWEEP_ALPHAS]
+            sweep += [sac_job('v1', env, 2021, a, phase='alpha-sweep') for a in sweep_alphas(env)]
         for seed in SEEDS:
             for s in SETTINGS:
                 if seed == 2021 and (s[0], env) in EXISTING_PROPOSED_2021:
