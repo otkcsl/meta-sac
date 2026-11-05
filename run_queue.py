@@ -121,8 +121,15 @@ SERVER_TASKS = {
     3: ['Hopper-v4', 'HalfCheetah-v4', 'Reacher-v4', 'Pusher-v4'],
 }
 
+# E9：同期をやめた版と、2体でバッファを共有した版。v1 README の E9（2026-11-05）。
+# 設定①の α ペアを使い、E8 の後に2番サーバで回す。Hopper は E8 では3番の受け持ちだが、E9 は別の実験なので2番に置く
+E9_TASKS = ['Hopper-v4', 'Walker2d-v4']
+E9_SEEDS = [2021, 2022, 2023]
+E9_BUFFERS = ['separate', 'shared']
+E9_SERVER = 2
+
 JOB_FIELDS = ['job_id', 'phase', 'method', 'env', 'seed', 'setting', 'alpha', 'asi', 'gsi', 'tau_g',
-              'num_steps', 'config', 'exp_id', 'save_dir', 'cmd']
+              'num_steps', 'config', 'exp_id', 'save_dir', 'cmd', 'server']
 RUN_FIELDS = ['job_id', 'method', 'env', 'seed', 'server', 'host', 'start', 'end', 'seconds', 'returncode', 'status',
               'cuda', 'save_dir', 'log']
 
@@ -166,6 +173,20 @@ def sac_job(version, env, seed, alpha=None, phase='main'):
                 num_steps=steps, config=config, exp_id=exp_id, save_dir=save_dir, cmd=' '.join(args))
 
 
+def e9_job(env, seed, buffer):
+    name, steps = TASKS[env]
+    alpha = SETTINGS[0][1]
+    exp_id = f'e9_{name}'
+    # proposed_main_e9.py の save_path と同じ組み立て方。同期しないので τ・GSI・ASI は渡さない
+    alpha_list = str([float(a) for a in alpha.split(',')])
+    save_dir = f'models/{exp_id}/{alpha_list}/v1/{seed}/False/e9_nosync_{buffer}/'
+    args = ['proposed_main_e9.py', f'configs_pro/{name}1.yml', '--seed', str(seed), '--alpha', alpha,
+            '--num_steps', str(steps), '--exp_id', exp_id, '--no_sync'] + (['--shared_buffer'] if buffer == 'shared' else [])
+    return dict(job_id=f'e9{buffer}-{name}-{seed}', phase='e9', method=f'e9-{buffer}', env=env, seed=seed,
+                setting=1, alpha=alpha, asi='', gsi='', tau_g='', num_steps=steps,
+                config=args[1], exp_id=exp_id, save_dir=save_dir, cmd=' '.join(args), server=E9_SERVER)
+
+
 def build_jobs():
     sweep, main = [], []
     for env in TASKS:
@@ -182,7 +203,11 @@ def build_jobs():
                 # α 選びのタスクでは、2021 の最良 α は α 選びの実行そのものなので足さない
                 if SAC_V1_ALPHA[env] is not None and not (seed == 2021 and env not in EXISTING_SAC_2021):
                     main.append(sac_job('v1', env, seed, SAC_V1_ALPHA[env]))
-    return sweep + main
+    e9 = [e9_job(env, seed, buffer) for seed in E9_SEEDS for env in E9_TASKS for buffer in E9_BUFFERS]
+    jobs = sweep + main + e9
+    for j in jobs:
+        j.setdefault('server', server_of(j['env']))
+    return jobs
 
 
 def check_servers():
@@ -202,12 +227,17 @@ def server_of(env):
     return next(server for server, envs in SERVER_TASKS.items() if env in envs)
 
 
+def job_server(job):
+    """実行を回すサーバ。E8 はタスクの受け持ちで決まり、E9 は実行ごとに持つ。"""
+    return int(job.get('server') or server_of(job['env']))
+
+
 def select(jobs, args):
     """--server と --env で一覧を絞る。"""
     if getattr(args, 'server', None) is not None:
         if args.server not in SERVER_TASKS:
             sys.exit(f'--server は {sorted(SERVER_TASKS)} のどれか')
-        jobs = [j for j in jobs if j['env'] in SERVER_TASKS[args.server]]
+        jobs = [j for j in jobs if job_server(j) == args.server]
     if getattr(args, 'env', None):
         jobs = [j for j in jobs if j['env'] in args.env]
     return jobs
@@ -234,7 +264,8 @@ def read_jobs():
 
 def is_done(job):
     """eval_metrics*.csv が揃っていれば終わっている。学習の最後にだけ書かれるファイルである。"""
-    names = ['eval_metrics0.csv', 'eval_metrics1.csv'] if job['method'] == 'proposed' else ['eval_metrics.csv']
+    two_agents = job['method'] == 'proposed' or job['method'].startswith('e9-')
+    names = ['eval_metrics0.csv', 'eval_metrics1.csv'] if two_agents else ['eval_metrics.csv']
     return all(os.path.isfile(os.path.join(job['save_dir'], n)) for n in names)
 
 
@@ -306,8 +337,9 @@ def cmd_plan(args):
               'α 選びの結果を見て SAC_V1_ALPHA に書き、もう一度 plan を実行すると 2022 以降が加わる')
     print('  サーバごとの本数:')
     for server, envs in SERVER_TASKS.items():
-        n = sum(1 for j in jobs if j['env'] in envs)
-        print(f'    {server}番サーバ  {n:>3} 本  {", ".join(envs)}')
+        n = sum(1 for j in jobs if job_server(j) == server)
+        n_e9 = sum(1 for j in jobs if job_server(j) == server and j['phase'] == 'e9')
+        print(f'    {server}番サーバ  {n:>3} 本  {", ".join(envs)}' + (f'、うち E9 {n_e9} 本' if n_e9 else ''))
     done = sum(is_done(j) for j in jobs)
     print(f'  うち、このサーバで終わっているもの: {done} 本')
 
@@ -365,7 +397,7 @@ def cmd_run(args):
                 ok = returncode in (0, '') and is_done(job)
                 status = 'done' if ok else 'failed'
                 append_run(dict(job_id=job['job_id'], method=job['method'], env=job['env'], seed=job['seed'],
-                                server=server_of(job['env']), host=host,
+                                server=job_server(job), host=host,
                                 start=datetime.datetime.fromtimestamp(t0).strftime('%Y-%m-%d %H:%M:%S'),
                                 end=now(), seconds=round(time.time() - t0), returncode=returncode,
                                 status=status, cuda='' if args.cuda is None or log is None else args.cuda,
@@ -386,7 +418,7 @@ def cmd_run(args):
                 except ProcessLookupError:
                     pass  # ちょうど終わっていた
             append_run(dict(job_id=job['job_id'], method=job['method'], env=job['env'], seed=job['seed'],
-                            server=server_of(job['env']), host=host,
+                            server=job_server(job), host=host,
                             start=datetime.datetime.fromtimestamp(t0).strftime('%Y-%m-%d %H:%M:%S'),
                             end=now(), seconds=round(time.time() - t0), returncode='', status='interrupted',
                             cuda='' if args.cuda is None else args.cuda, save_dir=job['save_dir'], log=log_path))
