@@ -72,6 +72,12 @@ TASKS = {
 # 2026-10-27 から、全タスクを先に3シードで揃える。12-15 までに間に合うサーバから LATER_SEEDS を足して plan し直す
 SEEDS = [2021, 2022, 2023]
 LATER_SEEDS = [2024, 2025]
+# 3シードが終わり、12-15 までに 2024・2025 が収まるタスク。2026-11-05 に Walker2d を足した。v1 README の E8
+EXTRA_SEEDS = {'Walker2d-v4': [2024, 2025]}
+
+
+def seeds_for(env):
+    return SEEDS + EXTRA_SEEDS.get(env, [])
 
 # 提案手法の3設定：中間発表の 153 設定の Reacher スコア上位3つ
 SETTINGS = [
@@ -166,7 +172,7 @@ def build_jobs():
         # SAC-v1 の α 選び。結果が出ないと残りのシードを決められないので、一覧の先頭に置く
         if SAC_V1_ALPHA[env] is None:
             sweep += [sac_job('v1', env, 2021, a, phase='alpha-sweep') for a in sweep_alphas(env)]
-        for seed in SEEDS:
+        for seed in seeds_for(env):
             for s in SETTINGS:
                 if seed == 2021 and (s[0], env) in EXISTING_PROPOSED_2021:
                     continue
