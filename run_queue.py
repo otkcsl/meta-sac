@@ -106,7 +106,8 @@ SAC_V1_ALPHA = {
 }
 SWEEP_ALPHAS = [0.0001, 0.01, 0.05, 0.1, 0.2]
 # 2026-11-04 に足した。HalfCheetah は 0.2 まで点数が上がり続け、最良が範囲の端だった。v1 README の E8
-EXTRA_SWEEP_ALPHAS = {'HalfCheetah-v4': [0.3, 0.4]}
+# 2026-11-10 に 0.5・0.8 を足した。0.3・0.4 でも最良が端の 0.4 だった。v1 README の E8 の「予定の変更（2026-11-10）」
+EXTRA_SWEEP_ALPHAS = {'HalfCheetah-v4': [0.3, 0.4, 0.5, 0.8]}
 
 
 def sweep_alphas(env):
