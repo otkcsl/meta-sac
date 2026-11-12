@@ -73,7 +73,14 @@ TASKS = {
 SEEDS = [2021, 2022, 2023]
 LATER_SEEDS = [2024, 2025]
 # 3シードが終わり、12-15 までに 2024・2025 が収まるタスク。2026-11-05 に Walker2d を足した。v1 README の E8
-EXTRA_SEEDS = {'Walker2d-v4': [2024, 2025]}
+# 2026-11-12 に、3番サーバの4タスクを足した。v1 README の E8 の「予定の変更（2026-11-12）」
+EXTRA_SEEDS = {
+    'Walker2d-v4': [2024, 2025],
+    'Hopper-v4': [2024, 2025],
+    'HalfCheetah-v4': [2024, 2025],
+    'Reacher-v4': [2024, 2025],
+    'Pusher-v4': [2024, 2025],
+}
 
 
 def seeds_for(env):
