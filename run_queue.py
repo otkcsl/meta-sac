@@ -110,7 +110,7 @@ SAC_V1_ALPHA = {
     'Hopper-v4': 0.05,
     'Walker2d-v4': 0.01,
     'Humanoid-v4': 0.2,
-    'HalfCheetah-v4': None,
+    'HalfCheetah-v4': 0.4,  # 2026-11-16 に 0.0001〜0.8 の9通りの α 選びで決めた。v1 README の E8 の「予定の変更（2026-11-10）」の追記
     'Pusher-v4': 0.01,  # 2026-11-04 に α 選びの結果で決めた。v1 README の E8
 }
 SWEEP_ALPHAS = [0.0001, 0.01, 0.05, 0.1, 0.2]
