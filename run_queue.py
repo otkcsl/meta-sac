@@ -137,6 +137,18 @@ E9_TASKS = ['Hopper-v4', 'Walker2d-v4']
 E9_SEEDS = [2021, 2022, 2023]
 E9_BUFFERS = ['separate', 'shared']
 E9_SERVER = 2
+# 2026-11-17 に、E9 は回さないことにした（ユーザの決定、時間の都合。v1 README の E9 の「予定の変更（2026-11-17）」）。
+# e9_job() は残してあり、build_jobs() で一覧に入れていない。後で回すときは build_jobs() に戻す
+
+# E10：設定①の GSI・ASI を同じ比で縮め、Walker2d で序盤の伸びを見る。v1 README の E10（2026-11-17）。
+# α ペアと τ は設定①のまま。総数 N＝3M で比べるので、1体 1.5M で止める。3番サーバの一覧の先頭で回す
+E10_TASK = 'Walker2d-v4'
+E10_SEEDS = [2021]
+E10_SCALES = [5, 10, 20]  # GSI と ASI を 1/5・1/10・1/20 にする
+E10_STEPS = 1_500_000
+E10_SERVER = 3
+# E10 の次に3番サーバで回すもの。HalfCheetah・Pusher の 2021〜2023 を先にそろえる。v1 README の E8 の「予定の変更（2026-11-17）」
+FIRST_ON_SERVER3 = ['HalfCheetah-v4', 'Pusher-v4']
 
 JOB_FIELDS = ['job_id', 'phase', 'method', 'env', 'seed', 'setting', 'alpha', 'asi', 'gsi', 'tau_g',
               'num_steps', 'config', 'exp_id', 'save_dir', 'cmd', 'server']
@@ -197,6 +209,22 @@ def e9_job(env, seed, buffer):
                 config=args[1], exp_id=exp_id, save_dir=save_dir, cmd=' '.join(args), server=E9_SERVER)
 
 
+def e10_job(scale, seed):
+    no, alpha, asi0, gsi0, tau = SETTINGS[0]
+    asi, gsi = asi0 // scale, gsi0 // scale
+    name, _ = TASKS[E10_TASK]
+    exp_id = f'e10_{name}'
+    # proposed_job() と同じ保存先の組み立て方。exp_id が違うので E8 の実行とは別の場所に入る
+    alpha_list = str([float(a) for a in alpha.split(',')])
+    save_dir = f'models/{exp_id}/{alpha_list}/v1/{seed}/True/tau_g{tau}_gsi{gsi}_asi{asi}/'
+    args = ['proposed_main.py', f'configs_pro/{name}1.yml', '--seed', str(seed), '--alpha', alpha,
+            '--gtoq', str(asi), '--qtog', str(gsi), '--tau_g', str(tau), '--num_steps', str(E10_STEPS),
+            '--exp_id', exp_id]
+    return dict(job_id=f'e10s{scale}-{name}-{seed}', phase='e10', method='e10', env=E10_TASK, seed=seed,
+                setting=no, alpha=alpha, asi=asi, gsi=gsi, tau_g=tau, num_steps=E10_STEPS,
+                config=args[1], exp_id=exp_id, save_dir=save_dir, cmd=' '.join(args), server=E10_SERVER)
+
+
 def build_jobs():
     sweep, main = [], []
     for env in TASKS:
@@ -213,8 +241,12 @@ def build_jobs():
                 # α 選びのタスクでは、2021 の最良 α は α 選びの実行そのものなので足さない
                 if SAC_V1_ALPHA[env] is not None and not (seed == 2021 and env not in EXISTING_SAC_2021):
                     main.append(sac_job('v1', env, seed, SAC_V1_ALPHA[env]))
-    e9 = [e9_job(env, seed, buffer) for seed in E9_SEEDS for env in E9_TASKS for buffer in E9_BUFFERS]
-    jobs = sweep + main + e9
+    # 3番サーバの HalfCheetah・Pusher の 2021〜2023 を、残りの E8 より前に出す。それ以外の並びは変えない
+    first = [j for j in main if j['env'] in FIRST_ON_SERVER3 and j['seed'] in SEEDS]
+    main = first + [j for j in main if j not in first]
+    e10 = [e10_job(scale, seed) for seed in E10_SEEDS for scale in E10_SCALES]
+    # E9 は 2026-11-17 に外した。run は一覧の上から順に回すので、E10 を先頭に置く
+    jobs = e10 + sweep + main
     for j in jobs:
         j.setdefault('server', server_of(j['env']))
     return jobs
@@ -274,7 +306,7 @@ def read_jobs():
 
 def is_done(job):
     """eval_metrics*.csv が揃っていれば終わっている。学習の最後にだけ書かれるファイルである。"""
-    two_agents = job['method'] == 'proposed' or job['method'].startswith('e9-')
+    two_agents = job['method'] in ('proposed', 'e10') or job['method'].startswith('e9-')
     names = ['eval_metrics0.csv', 'eval_metrics1.csv'] if two_agents else ['eval_metrics.csv']
     return all(os.path.isfile(os.path.join(job['save_dir'], n)) for n in names)
 
@@ -349,7 +381,9 @@ def cmd_plan(args):
     for server, envs in SERVER_TASKS.items():
         n = sum(1 for j in jobs if job_server(j) == server)
         n_e9 = sum(1 for j in jobs if job_server(j) == server and j['phase'] == 'e9')
-        print(f'    {server}番サーバ  {n:>3} 本  {", ".join(envs)}' + (f'、うち E9 {n_e9} 本' if n_e9 else ''))
+        n_e10 = sum(1 for j in jobs if job_server(j) == server and j['phase'] == 'e10')
+        print(f'    {server}番サーバ  {n:>3} 本  {", ".join(envs)}' + (f'、うち E9 {n_e9} 本' if n_e9 else '')
+              + (f'、うち E10 {n_e10} 本（{E10_TASK}、先頭で回す）' if n_e10 else ''))
     done = sum(is_done(j) for j in jobs)
     print(f'  うち、このサーバで終わっているもの: {done} 本')
 
