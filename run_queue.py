@@ -147,7 +147,13 @@ E10_SEEDS = [2021]
 E10_SCALES = [5, 10, 20]  # GSI と ASI を 1/5・1/10・1/20 にする
 E10_STEPS = 1_500_000
 E10_SERVER = 3
-# E10 の次に3番サーバで回すもの。HalfCheetah・Pusher の 2021〜2023 を先にそろえる。v1 README の E8 の「予定の変更（2026-11-17）」
+# E7：v2（共有バッファ＋α 条件付き共有ネットワーク）の試しの1本。v1 README の E7 の「予定の変更（2026-11-21）」。
+# α ペアは設定①と同じ。ワーカーごとに 1.5M で総数 3M。3番サーバで E10 の次に回す
+E7_TASK = 'Walker2d-v4'
+E7_SEEDS = [2021]
+E7_STEPS = 1_500_000
+E7_SERVER = 3
+# E10・E7 の次に3番サーバで回すもの。HalfCheetah・Pusher の 2021〜2023 を先にそろえる。v1 README の E8 の「予定の変更（2026-11-17）」
 FIRST_ON_SERVER3 = ['HalfCheetah-v4', 'Pusher-v4']
 
 JOB_FIELDS = ['job_id', 'phase', 'method', 'env', 'seed', 'setting', 'alpha', 'asi', 'gsi', 'tau_g',
@@ -225,6 +231,20 @@ def e10_job(scale, seed):
                 config=args[1], exp_id=exp_id, save_dir=save_dir, cmd=' '.join(args), server=E10_SERVER)
 
 
+def e7_job(seed):
+    alpha = SETTINGS[0][1]
+    name, _ = TASKS[E7_TASK]
+    exp_id = f'e7_{name}'
+    # proposed_main_v2.py の save_path と同じ組み立て方
+    alpha_list = str([float(a) for a in alpha.split(',')])
+    save_dir = f'models/{exp_id}/{alpha_list}/v2net/{seed}/'
+    args = ['proposed_main_v2.py', f'configs_pro/{name}1.yml', '--seed', str(seed), '--alpha', alpha,
+            '--num_steps', str(E7_STEPS), '--exp_id', exp_id]
+    return dict(job_id=f'e7v2-{name}-{seed}', phase='e7', method='v2', env=E7_TASK, seed=seed,
+                setting=1, alpha=alpha, asi='', gsi='', tau_g='', num_steps=E7_STEPS,
+                config=args[1], exp_id=exp_id, save_dir=save_dir, cmd=' '.join(args), server=E7_SERVER)
+
+
 def build_jobs():
     sweep, main = [], []
     for env in TASKS:
@@ -245,8 +265,9 @@ def build_jobs():
     first = [j for j in main if j['env'] in FIRST_ON_SERVER3 and j['seed'] in SEEDS]
     main = first + [j for j in main if j not in first]
     e10 = [e10_job(scale, seed) for seed in E10_SEEDS for scale in E10_SCALES]
-    # E9 は 2026-11-17 に外した。run は一覧の上から順に回すので、E10 を先頭に置く
-    jobs = e10 + sweep + main
+    e7 = [e7_job(seed) for seed in E7_SEEDS]
+    # E9 は 2026-11-17 に外した。run は一覧の上から順に回すので、E10・E7 を先頭に置く
+    jobs = e10 + e7 + sweep + main
     for j in jobs:
         j.setdefault('server', server_of(j['env']))
     return jobs
@@ -306,7 +327,7 @@ def read_jobs():
 
 def is_done(job):
     """eval_metrics*.csv が揃っていれば終わっている。学習の最後にだけ書かれるファイルである。"""
-    two_agents = job['method'] in ('proposed', 'e10') or job['method'].startswith('e9-')
+    two_agents = job['method'] in ('proposed', 'e10', 'v2') or job['method'].startswith('e9-')
     names = ['eval_metrics0.csv', 'eval_metrics1.csv'] if two_agents else ['eval_metrics.csv']
     return all(os.path.isfile(os.path.join(job['save_dir'], n)) for n in names)
 
@@ -382,8 +403,10 @@ def cmd_plan(args):
         n = sum(1 for j in jobs if job_server(j) == server)
         n_e9 = sum(1 for j in jobs if job_server(j) == server and j['phase'] == 'e9')
         n_e10 = sum(1 for j in jobs if job_server(j) == server and j['phase'] == 'e10')
+        n_e7 = sum(1 for j in jobs if job_server(j) == server and j['phase'] == 'e7')
         print(f'    {server}番サーバ  {n:>3} 本  {", ".join(envs)}' + (f'、うち E9 {n_e9} 本' if n_e9 else '')
-              + (f'、うち E10 {n_e10} 本（{E10_TASK}、先頭で回す）' if n_e10 else ''))
+              + (f'、うち E10 {n_e10} 本（{E10_TASK}、先頭で回す）' if n_e10 else '')
+              + (f'、うち E7 {n_e7} 本（{E7_TASK}、E10 の次に回す）' if n_e7 else ''))
     done = sum(is_done(j) for j in jobs)
     print(f'  うち、このサーバで終わっているもの: {done} 本')
 
