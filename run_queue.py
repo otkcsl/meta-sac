@@ -153,8 +153,15 @@ E7_TASK = 'Walker2d-v4'
 E7_SEEDS = [2021]
 E7_STEPS = 1_500_000
 E7_SERVER = 3
-# E10・E7 の次に3番サーバで回すもの。HalfCheetah・Pusher の 2021〜2023 を先にそろえる。v1 README の E8 の「予定の変更（2026-11-17）」
-FIRST_ON_SERVER3 = ['HalfCheetah-v4', 'Pusher-v4']
+# E11：Walker2d の SAC-v1・SAC-v2 を 6M まで回す。v1 README の E11（2026-11-23）。学習シード 2021 は 10M の既存の実行を使う
+E11_TASK = 'Walker2d-v4'
+E11_SEEDS = [2022, 2023]
+E11_STEPS = 6_000_000
+E11_SERVER = 2
+# E10・E7 の次に3番サーバで回すもの。Pusher の 2021〜2023 を先にそろえる。v1 README の E8 の「予定の変更（2026-11-17）」
+# 2026-11-23 に HalfCheetah を外し、一覧の最後に回すことにした（同じ予定の変更の追記）
+FIRST_ON_SERVER3 = ['Pusher-v4']
+LAST_ON_SERVER3 = ['HalfCheetah-v4']
 
 JOB_FIELDS = ['job_id', 'phase', 'method', 'env', 'seed', 'setting', 'alpha', 'asi', 'gsi', 'tau_g',
               'num_steps', 'config', 'exp_id', 'save_dir', 'cmd', 'server']
@@ -245,6 +252,20 @@ def e7_job(seed):
                 config=args[1], exp_id=exp_id, save_dir=save_dir, cmd=' '.join(args), server=E7_SERVER)
 
 
+def e11_job(version, seed):
+    name, _ = TASKS[E11_TASK]
+    alpha = SAC_V1_ALPHA[E11_TASK] if version == 'v1' else None
+    j = sac_job(version, E11_TASK, seed, alpha, phase='e11')
+    # sac_job() は E8 の exp_id とステップ数で組み立てるので、E11 の値に置き換える
+    exp_id = f'e11_{name}'
+    j['cmd'] = j['cmd'].replace(f'--num_steps {TASKS[E11_TASK][1]}', f'--num_steps {E11_STEPS}').replace(
+        f'--exp_id {j["exp_id"]}', f'--exp_id {exp_id}')
+    j['save_dir'] = j['save_dir'].replace(f'models/{j["exp_id"]}/', f'models/{exp_id}/')
+    # method を分けるのは、status が (method, env) でまとめるので、E8 の 3M の SAC と1本の時間が混ざらないようにするため
+    j.update(job_id='e11' + j['job_id'], method='e11-' + j['method'], exp_id=exp_id, num_steps=E11_STEPS, server=E11_SERVER)
+    return j
+
+
 def build_jobs():
     sweep, main = [], []
     for env in TASKS:
@@ -263,11 +284,13 @@ def build_jobs():
                     main.append(sac_job('v1', env, seed, SAC_V1_ALPHA[env]))
     # 3番サーバの HalfCheetah・Pusher の 2021〜2023 を、残りの E8 より前に出す。それ以外の並びは変えない
     first = [j for j in main if j['env'] in FIRST_ON_SERVER3 and j['seed'] in SEEDS]
-    main = first + [j for j in main if j not in first]
+    last = [j for j in main if j['env'] in LAST_ON_SERVER3]
+    main = first + [j for j in main if j not in first and j not in last] + last
     e10 = [e10_job(scale, seed) for seed in E10_SEEDS for scale in E10_SCALES]
     e7 = [e7_job(seed) for seed in E7_SEEDS]
-    # E9 は 2026-11-17 に外した。run は一覧の上から順に回すので、E10・E7 を先頭に置く
-    jobs = e10 + e7 + sweep + main
+    e11 = [e11_job(version, seed) for seed in E11_SEEDS for version in ('v1', 'v2')]
+    # E9 は 2026-11-17 に外した。run は一覧の上から順に回すので、E10・E7・E11 を先頭に置く。E11 は2番サーバに入る
+    jobs = e10 + e7 + e11 + sweep + main
     for j in jobs:
         j.setdefault('server', server_of(j['env']))
     return jobs
@@ -404,9 +427,11 @@ def cmd_plan(args):
         n_e9 = sum(1 for j in jobs if job_server(j) == server and j['phase'] == 'e9')
         n_e10 = sum(1 for j in jobs if job_server(j) == server and j['phase'] == 'e10')
         n_e7 = sum(1 for j in jobs if job_server(j) == server and j['phase'] == 'e7')
+        n_e11 = sum(1 for j in jobs if job_server(j) == server and j['phase'] == 'e11')
         print(f'    {server}番サーバ  {n:>3} 本  {", ".join(envs)}' + (f'、うち E9 {n_e9} 本' if n_e9 else '')
               + (f'、うち E10 {n_e10} 本（{E10_TASK}、先頭で回す）' if n_e10 else '')
-              + (f'、うち E7 {n_e7} 本（{E7_TASK}、E10 の次に回す）' if n_e7 else ''))
+              + (f'、うち E7 {n_e7} 本（{E7_TASK}、E10 の次に回す）' if n_e7 else '')
+              + (f'、うち E11 {n_e11} 本（{E11_TASK} の SAC を {E11_STEPS:,} まで、先頭で回す）' if n_e11 else ''))
     done = sum(is_done(j) for j in jobs)
     print(f'  うち、このサーバで終わっているもの: {done} 本')
 
