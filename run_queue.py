@@ -158,6 +158,8 @@ E11_TASK = 'Walker2d-v4'
 E11_SEEDS = [2022, 2023]
 E11_STEPS = 6_000_000
 E11_SERVER = 2
+# 2026-11-25 に E11 は延期した（ユーザの決定、v1 README の E11 の予定の変更）。True に戻すと一覧の先頭に4本が入る
+E11_IN_QUEUE = False
 # E10・E7 の次に3番サーバで回すもの。Pusher の 2021〜2023 を先にそろえる。v1 README の E8 の「予定の変更（2026-11-17）」
 # 2026-11-23 に HalfCheetah を外し、一覧の最後に回すことにした（同じ予定の変更の追記）
 FIRST_ON_SERVER3 = ['Pusher-v4']
@@ -288,7 +290,7 @@ def build_jobs():
     main = first + [j for j in main if j not in first and j not in last] + last
     e10 = [e10_job(scale, seed) for seed in E10_SEEDS for scale in E10_SCALES]
     e7 = [e7_job(seed) for seed in E7_SEEDS]
-    e11 = [e11_job(version, seed) for seed in E11_SEEDS for version in ('v1', 'v2')]
+    e11 = [e11_job(version, seed) for seed in E11_SEEDS for version in ('v1', 'v2')] if E11_IN_QUEUE else []
     # E9 は 2026-11-17 に外した。run は一覧の上から順に回すので、E10・E7・E11 を先頭に置く。E11 は2番サーバに入る
     jobs = e10 + e7 + e11 + sweep + main
     for j in jobs:
